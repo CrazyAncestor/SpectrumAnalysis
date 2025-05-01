@@ -55,6 +55,8 @@ def load_data_from_fits(fits_path):
 
     return data_dict
 
+
+
 def extract_data_from_files(data_dir):
     grouped_data = defaultdict(dict)
 
@@ -267,3 +269,35 @@ def plot_transmission_spectrum(reference_fits, sample_fits, freq_range = None, z
         plt.grid(True)
         plt.tight_layout()
         plt.show()
+
+def add_data_value(fits1, fits2, output_path):
+    dataset1 = load_data_from_fits(fits1)
+    dataset2 = load_data_from_fits(fits2)
+    data_added = defaultdict(dict)
+
+    for field_value, entry in dataset1.items():
+        combined = np.column_stack((dataset1[field_value]['data'][:,0], dataset1[field_value]['data'][:,1] + dataset2[field_value]['data'][:,1]))
+        data_added[field_value] = {
+                    "step_fs": dataset1[field_value]['step_fs'],
+                    "start_ps": dataset1[field_value]['start_ps'],
+                    "delay_ms": dataset1[field_value]['delay_ms'],
+                    "data": combined
+                }
+    save_data_to_fits(data_added, output_path)
+    return data_added
+
+def subtract_data_value(fits1, fits2, output_path):
+    dataset1 = load_data_from_fits(fits1)
+    dataset2 = load_data_from_fits(fits2)
+    data_subtracted = defaultdict(dict)
+
+    for field_value, entry in dataset1.items():
+        combined = np.column_stack((dataset1[field_value]['data'][:,0], dataset1[field_value]['data'][:,1] - dataset2[field_value]['data'][:,1]))
+        data_subtracted[field_value] = {
+                    "step_fs": dataset1[field_value]['step_fs'],
+                    "start_ps": dataset1[field_value]['start_ps'],
+                    "delay_ms": dataset1[field_value]['delay_ms'],
+                    "data": combined
+                }
+    save_data_to_fits(data_subtracted, output_path)
+    return data_subtracted
