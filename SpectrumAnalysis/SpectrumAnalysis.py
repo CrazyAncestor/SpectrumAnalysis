@@ -151,7 +151,25 @@ def plot_Efields_from_fits(fits_path, title="E-field vs Time"):
         plt.tight_layout()
         plt.show()
 
-def plot_fft_from_fits(fits_path, positive_B_field_or_not = True, title="FFT of E-field", plot_time_domain=False):
+def fft_with_zero_padding(time, td_data, zero_padding_ratio = None):
+    if zero_padding_ratio is None:
+        N = len(td_data)
+        dt = time[1] - time[0]  # Time step (assumed constant)
+        freq = np.fft.fftfreq(N, dt)  # Frequency values
+        td_data_fft = np.fft.fft(td_data)  # FFT of td_data
+        td_data_fft_mag = np.abs(td_data_fft)  # Magnitude of FFT
+    else:
+        N = int(len(td_data) * zero_padding_ratio)
+        add_mum = N - len(td_data)
+        dt = time[1] - time[0]
+        td_data_new = np.concatenate([np.array(td_data), np.zeros(add_mum)])
+        freq = np.fft.fftfreq(N, dt)  # Frequency values
+        td_data_fft = np.fft.fft(td_data_new)  # FFT of td_data
+        td_data_fft_mag = np.abs(td_data_fft)  # Magnitude of FFT
+
+    return N, freq, td_data_fft_mag
+
+def plot_fft_from_fits(fits_path, zero_padding_ratio = 1., positive_B_field_or_not = True, title="FFT of E-field", plot_time_domain=False):
     # Open the FITS file
     with fits.open(fits_path) as hdul:
         plt.figure(figsize=(10, 6))
@@ -178,11 +196,7 @@ def plot_fft_from_fits(fits_path, positive_B_field_or_not = True, title="FFT of 
                 E_field = data[:, 1]  # arbitrary units
 
                 # Perform FFT
-                N = len(E_field)
-                dt = time[1] - time[0]  # Time step (assumed constant)
-                freq = np.fft.fftfreq(N, dt)  # Frequency values
-                E_field_fft = np.fft.fft(E_field)  # FFT of E_field
-                E_field_fft_mag = np.abs(E_field_fft)  # Magnitude of FFT
+                N, freq, E_field_fft_mag = fft_with_zero_padding(time, E_field, zero_padding_ratio=zero_padding_ratio)
 
                 # Only keep the positive frequencies and their magnitudes
                 positive_freq = freq[:N // 2]
@@ -213,7 +227,7 @@ def plot_fft_from_fits(fits_path, positive_B_field_or_not = True, title="FFT of 
         plt.tight_layout()
         plt.show()
 
-def plot_transmission_spectrum(reference_fits, sample_fits, freq_range = None, positive_B_field_or_not = True, title="Transmission Spectrum"):
+def plot_transmission_spectrum(reference_fits, sample_fits, freq_range = None, zero_padding_ratio = 1., positive_B_field_or_not = True, title="Transmission Spectrum"):
     # Open both FITS files
     with fits.open(reference_fits) as ref_hdul, fits.open(sample_fits) as samp_hdul:
         plt.figure(figsize=(10, 6))
@@ -234,21 +248,14 @@ def plot_transmission_spectrum(reference_fits, sample_fits, freq_range = None, p
             ref_E = ref_data[:, 1]
             samp_E = samp_data[:, 1]
 
-            N = len(ref_E)
-            dt = time[1] - time[0]
-            freq = np.fft.fftfreq(N, dt)
-
-            ref_fft = np.fft.fft(ref_E)
-            samp_fft = np.fft.fft(samp_E)
-
-            ref_mag = np.abs(ref_fft[:N // 2])
-            samp_mag = np.abs(samp_fft[:N // 2])
+            N, freq, ref_mag = fft_with_zero_padding(time, ref_E, zero_padding_ratio=zero_padding_ratio)
+            N, freq, samp_mag = fft_with_zero_padding(time, samp_E, zero_padding_ratio=zero_padding_ratio)
             trans = samp_mag/ref_mag  # Avoid division by zero
 
             color = colormap(idx / num_colors)
             label = f"{samp_B:.3f} T"
 
-            plt.plot(freq[:N // 2], trans, label=label, color=color)
+            plt.plot(freq[:N // 2], trans[:N // 2], label=label, color=color)
 
         plt.xlabel("Frequency (THz)")
         plt.ylabel("Transmission (arb. units)")
