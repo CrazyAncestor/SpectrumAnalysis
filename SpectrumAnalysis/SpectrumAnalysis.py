@@ -222,7 +222,7 @@ def plot_fft_from_fits(fits_path, zero_padding_ratio = 1., positive_B_field_or_n
                 plt.plot(positive_freq, positive_fft_mag, label=f'{field_value:.3f} T', color=color)
                 plt.xlabel("Frequency (THz)")
                 plt.ylabel("Magnitude")
-                plt.title("FFT Spectrum (Positive Frequencies)")
+                plt.title(title)
                 plt.legend()
                 plt.grid(True)
 
@@ -301,3 +301,31 @@ def subtract_data_value(fits1, fits2, output_path):
                 }
     save_data_to_fits(data_subtracted, output_path)
     return data_subtracted
+
+def rotate_angle_vs_major_axis(Ex_fits, Ey_fits, angle_in_deg, output_path_major, output_path_minor):
+    Ex_dataset = load_data_from_fits(Ex_fits)
+    Ey_dataset = load_data_from_fits(Ey_fits)
+
+    data_major = defaultdict(dict)
+    data_minor = defaultdict(dict)
+
+    angle_in_rad = np.deg2rad(angle_in_deg)
+    for field_value, entry in Ex_dataset.items():
+        combined_major = np.column_stack((Ex_dataset[field_value]['data'][:,0], Ex_dataset[field_value]['data'][:,1] *np.sin(angle_in_rad) - Ey_dataset[field_value]['data'][:,1]*np.cos(angle_in_rad)))
+        combined_minor = np.column_stack((Ex_dataset[field_value]['data'][:,0], Ex_dataset[field_value]['data'][:,1] *np.cos(angle_in_rad) + Ey_dataset[field_value]['data'][:,1]*np.sin(angle_in_rad)))
+        data_major[field_value] = {
+                    "step_fs": Ex_dataset[field_value]['step_fs'],
+                    "start_ps": Ex_dataset[field_value]['start_ps'],
+                    "delay_ms": Ex_dataset[field_value]['delay_ms'],
+                    "data": combined_major
+                }
+        data_minor[field_value] = {
+                    "step_fs": Ey_dataset[field_value]['step_fs'],
+                    "start_ps": Ey_dataset[field_value]['start_ps'],
+                    "delay_ms": Ey_dataset[field_value]['delay_ms'],
+                    "data": combined_minor
+                }
+
+    save_data_to_fits(data_major, output_path_major)
+    save_data_to_fits(data_minor, output_path_minor)
+    return data_major, data_minor
