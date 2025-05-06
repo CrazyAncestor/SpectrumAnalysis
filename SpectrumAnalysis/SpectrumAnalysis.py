@@ -29,7 +29,7 @@ def save_data_to_fits(data_dict, output_path):
     hdul.writeto(output_path, overwrite=True)
     print(f"Saved to {output_path}")
     
-def load_data_from_fits(fits_path):
+def load_data_from_fits(fits_path, print_summary=False):
     data_dict = {}
 
     with fits.open(fits_path) as hdul:
@@ -51,32 +51,22 @@ def load_data_from_fits(fits_path):
             }
 
             # Print summary info
-            print(f"{field_value} T → step: {step_fs} fs, start: {start_ps} ps, delay: {delay_ms} ms, points: {len(data)}")
+            if print_summary:
+                print(f"{field_value} T → step: {step_fs} fs, start: {start_ps} ps, delay: {delay_ms} ms, points: {len(data)}")
 
     return data_dict
-
-
 
 def extract_data_from_files(data_dir):
     grouped_data = defaultdict(dict)
 
-    def extract_data_from_file(file_path, grouped_data, sample_or_not):
+    def extract_data_from_file(file_path, grouped_data, field_dependent, save_each_scan = False):
         filename = os.path.basename(file_path)
-        if sample_or_not:
-            match = re.search(r'_([-+]?\d*\.?\d+)T\.txt$', filename)
-            if not match:
-                print(f"Skipping T file (no match): {filename}")
-                return
-
-            field_value = float(match.group(1))
-        else:
-            field_value = 0.0
-
         try:
             with open(file_path, 'r') as f:
                 header_line = f.readline().strip()
                 identifier_line = f.readline().strip()
 
+            # Extract from the header line
             header_match = re.search(
                 r'step(\d+)fs_\d+pnts_from([-+]?\d+)ps_delay(\d+)ms',
                 header_line
@@ -89,33 +79,75 @@ def extract_data_from_files(data_dir):
                 print(f"Warning: couldn't parse header in {filename}")
                 step_fs = start_ps = delay_ms = None
 
-            E_field = np.loadtxt(file_path, skiprows=2)
-
-            if step_fs is not None and start_ps is not None:
-                time = start_ps + np.arange(len(E_field)) * step_fs * 1e-3
+            # Determine if the file is saved for each scan or not
+            if save_each_scan_files:
+                match = re.search(r'_scan(\d+)', filename)
+                if not match:
+                    print(f"Skipping save each scan file (no match): {filename}")
+                    return
+                
+                # Extract data of E-field and time from the file
+                data = np.loadtxt(file_path, skiprows=2)
+                time = data[:, 0]
+                E_field = data[:, 1]
                 combined = np.column_stack((time, E_field))
+                
+                # Extract scan number from filename
+                scan_number = int(match.group(1))
+                grouped_data[identifier_line][scan_number] = {
+                    "step_fs": step_fs,
+                    "start_ps": start_ps,
+                    "delay_ms": delay_ms,
+                    "data": combined
+                }
             else:
-                combined = np.column_stack((np.zeros_like(E_field), E_field))
+                # Extract data of E-field from the file
+                E_field = np.loadtxt(file_path, skiprows=2)
 
-            grouped_data[identifier_line][field_value] = {
-                "step_fs": step_fs,
-                "start_ps": start_ps,
-                "delay_ms": delay_ms,
-                "data": combined
-            }
+                if step_fs is not None and start_ps is not None:
+                    time = start_ps + np.arange(len(E_field)) * step_fs * 1e-3
+                    combined = np.column_stack((time, E_field))
+                else:
+                    combined = np.column_stack((np.zeros_like(E_field), E_field))
+                
+                # Determine if this is a field-dependent file
+                if field_dependent:
+                    # Extract field value from filename
+                    match = re.search(r'_([-+]?\d*\.?\d+)T\.txt$', filename)
+                    if not match:
+                        print(f"Skipping T file (no match): {filename}")
+                        return
+                    field_value = float(match.group(1))
+                else:
+                    field_value = 0.0
+
+                grouped_data[identifier_line][field_value] = {
+                    "step_fs": step_fs,
+                    "start_ps": start_ps,
+                    "delay_ms": delay_ms,
+                    "data": combined
+                }
 
         except Exception as e:
             print(f"Error loading T file {filename}: {e}")
     
-    # --- Process *T.txt files ---
-    sample_files = glob.glob(os.path.join(data_dir, '*T.txt'))
-    for file_path in sample_files:
-        extract_data_from_file(file_path, grouped_data=grouped_data, sample_or_not=True)
+    # --- Process field-dependent measurement files ---
+    field_dept_files = [
+        f for f in glob.glob(os.path.join(data_dir, '*T.txt'))
+        if any(c.isdigit() for c in os.path.basename(f)) and 'T' in os.path.basename(f)
+    ]
+    for file_path in field_dept_files:
+        extract_data_from_file(file_path, grouped_data=grouped_data, field_dependent=True)
+
+    # --- Process save each scan files ---
+    save_each_scan_files = glob.glob(os.path.join(data_dir, '*_scan[0-9]*.txt'))
+    for file_path in save_each_scan_files:
+        extract_data_from_file(file_path, grouped_data=grouped_data, field_dependent=False, save_each_scan =True)
 
     # --- Process *_Aperture.txt files ---
     aperture_files = glob.glob(os.path.join(data_dir, '*_Aperture.txt'))
     for file_path in aperture_files:
-        extract_data_from_file(file_path, grouped_data=grouped_data, sample_or_not=False)
+        extract_data_from_file(file_path, grouped_data=grouped_data, field_dependent=False)
 
     # --- Save grouped data ---
     for identifier, full_data in grouped_data.items():
@@ -222,7 +254,7 @@ def plot_fft_from_fits(fits_path, zero_padding_ratio = 1., positive_B_field_or_n
                 plt.plot(positive_freq, positive_fft_mag, label=f'{field_value:.3f} T', color=color)
                 plt.xlabel("Frequency (THz)")
                 plt.ylabel("Magnitude")
-                plt.title("FFT Spectrum (Positive Frequencies)")
+                plt.title(title)
                 plt.legend()
                 plt.grid(True)
 
@@ -301,3 +333,76 @@ def subtract_data_value(fits1, fits2, output_path):
                 }
     save_data_to_fits(data_subtracted, output_path)
     return data_subtracted
+
+def rotate_angle_vs_major_axis(Ex_fits, Ey_fits, angle_in_deg, output_path_major, output_path_minor):
+    Ex_dataset = load_data_from_fits(Ex_fits)
+    Ey_dataset = load_data_from_fits(Ey_fits)
+
+    data_major = defaultdict(dict)
+    data_minor = defaultdict(dict)
+
+    angle_in_rad = np.deg2rad(angle_in_deg)
+    for field_value, entry in Ex_dataset.items():
+        combined_major = np.column_stack((Ex_dataset[field_value]['data'][:,0], Ex_dataset[field_value]['data'][:,1] *np.sin(angle_in_rad) - Ey_dataset[field_value]['data'][:,1]*np.cos(angle_in_rad)))
+        combined_minor = np.column_stack((Ex_dataset[field_value]['data'][:,0], Ex_dataset[field_value]['data'][:,1] *np.cos(angle_in_rad) + Ey_dataset[field_value]['data'][:,1]*np.sin(angle_in_rad)))
+        data_major[field_value] = {
+                    "step_fs": Ex_dataset[field_value]['step_fs'],
+                    "start_ps": Ex_dataset[field_value]['start_ps'],
+                    "delay_ms": Ex_dataset[field_value]['delay_ms'],
+                    "data": combined_major
+                }
+        data_minor[field_value] = {
+                    "step_fs": Ey_dataset[field_value]['step_fs'],
+                    "start_ps": Ey_dataset[field_value]['start_ps'],
+                    "delay_ms": Ey_dataset[field_value]['delay_ms'],
+                    "data": combined_minor
+                }
+
+    save_data_to_fits(data_major, output_path_major)
+    save_data_to_fits(data_minor, output_path_minor)
+    return data_major, data_minor
+
+def plot_avg_std_from_fits(fits_file):
+    metadata = load_data_from_fits(fits_file)
+    
+    time = metadata[1]['data'][:, 0]
+    E_field = [metadata[key]['data'][:, 1] for key in metadata]
+    
+    # Time-domain average and std
+    E_field_stack = np.stack(E_field)
+    E_field_avg = np.mean(E_field_stack, axis=0)
+    E_field_std = np.std(E_field_stack, axis=0)
+
+    # Plot time-domain data
+    plt.figure(figsize=(10, 4))
+    plt.plot(time, E_field_avg, label='Average E-field')
+    plt.fill_between(time, E_field_avg - E_field_std, E_field_avg + E_field_std, alpha=0.2, label='Standard Deviation')
+    plt.xlabel('Time (ps)')
+    plt.ylabel('E-field (arb. units)')
+    plt.title('E-field time-domain data')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
+    # FFT computation
+    fft_all = [np.abs(np.fft.fft(e)) for e in E_field]
+    fft_stack = np.stack(fft_all)
+    fft_avg = np.mean(fft_stack, axis=0)
+    fft_std = np.std(fft_stack, axis=0)
+
+    freqs = np.fft.fftfreq(len(time), d=(time[1] - time[0]))  # Frequency axis
+
+    # Plot frequency-domain data
+    plt.figure(figsize=(10, 4))
+    plt.plot(freqs, fft_avg, label='Average FFT')
+    plt.fill_between(freqs, fft_avg - fft_std, fft_avg + fft_std, alpha=0.2, label='FFT Std Dev')
+    plt.xlabel('Frequency (THz)')
+    plt.ylabel('Amplitude (arb. units)')
+    plt.title('FFT of E-field')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
+    return E_field_avg, E_field_std, fft_avg, fft_std, freqs
