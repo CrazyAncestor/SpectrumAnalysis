@@ -6,6 +6,149 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 import matplotlib.cm as cm
 from collections import defaultdict
+import zipfile
+import os
+
+def unzip_file(zip_path, extract_to=None):
+    """
+    Extracts all files from a zip archive directly into the target folder,
+    ignoring internal folder structure.
+    
+    Args:
+        zip_path (str): Path to the zip file.
+        extract_to (str, optional): Output folder. Defaults to zip file name (no extension).
+    
+    Returns:
+        str: Path to the extraction directory.
+    """
+    if not extract_to:
+        extract_to = os.path.splitext(zip_path)[0]
+
+    os.makedirs(extract_to, exist_ok=True)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        for member in zip_ref.infolist():
+            if not member.is_dir():
+                # Get just the filename without any internal folders
+                filename = os.path.basename(member.filename)
+                if filename:  # skip if it's an empty name (e.g., directory)
+                    target_path = os.path.join(extract_to, filename)
+                    with zip_ref.open(member) as source, open(target_path, 'wb') as target:
+                        target.write(source.read())
+
+    return extract_to
+
+def process_data_zip(zip_path, metadata_filename ='metadata.fits', raw_data_dir=None, preprocessed_data_dir=None):
+    # Step 1: Unzip
+    unzip_file(zip_path, extract_to=raw_data_dir)
+
+    # Step 2: Extract basic_info.txt
+    basic_info_path = os.path.join(raw_data_dir, 'basic_info.txt')
+    if os.path.exists(basic_info_path):
+        with open(basic_info_path, 'r') as f:
+            date = f.readline().strip()
+            author = f.readline().strip()
+    else:
+        date = 'UNKNOWN'
+        author = 'UNKNOWN'
+
+    # Step 3: Extract power_log.txt
+    power_log_path = os.path.join(raw_data_dir, 'power_log.txt')
+    if os.path.exists(power_log_path):
+        with open(power_log_path, 'r') as f:
+            power_str = f.readline().strip()
+            try:
+                power = float(power_str)
+            except ValueError:
+                power = -1.0  # fallback
+    else:
+        power = -1.0
+
+    # Step 4: Create a FITS file with this metadata in the primary header
+    hdu = fits.PrimaryHDU()
+    hdu.header['DATE'] = date
+    hdu.header['AUTHOR'] = author
+    hdu.header['POWER'] = power
+    hdul = fits.HDUList([hdu])
+
+    # Step 5: Save the FITS file
+    os.makedirs(preprocessed_data_dir, exist_ok=True)
+    fits_path = os.path.join(preprocessed_data_dir, metadata_filename)
+    hdul.writeto(fits_path, overwrite=True)
+
+    # Step 6: Continue processing other data
+    preprocssed_filenames = extract_data_from_files(raw_data_dir, preprocessed_data_dir=preprocessed_data_dir)
+
+    # Step 7: Print the preprocessed filenames
+    print("Preprocessed files:")
+    for filename in preprocssed_filenames:
+        print(f" - {filename}")
+    
+    # Step 8: Add HDU to the FITS file
+    add_hdu(fits_path, preprocssed_filenames, hdu_name="REF1")
+    add_hdu(fits_path, preprocssed_filenames, hdu_name="SAMPLE1")
+
+def add_hdu(fits_path, preprocessed_filenames, hdu_name="REF1"):
+    """
+    Prompts the user to select a FITS file, stacks its 2D HDUs into a 3D array,
+    and appends it to the specified FITS file as a new ImageHDU.
+
+    Parameters:
+        fits_path (str): Path to the FITS file to update.
+        preprocessed_filenames (list of str): List of full paths to candidate FITS files.
+        hdu_name (str): Name to assign to the new HDU (e.g., 'REF1', 'SAMPLE1').
+    """
+    print(f"Please select the FITS file to add as HDU '{hdu_name}':")
+    for i, full_path in enumerate(preprocessed_filenames):
+        print(f"{i}: {full_path}")
+
+    # Validate user input
+    while True:
+        try:
+            selected_index = int(input("Enter the index of the file: "))
+            if 0 <= selected_index < len(preprocessed_filenames):
+                break
+            else:
+                print("Index out of range. Try again.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+    selected_filename = preprocessed_filenames[selected_index]
+    print(f"You selected: {selected_filename}")
+
+    # Open and process the selected FITS file
+    with fits.open(selected_filename) as hdul_input:
+        array_list = []
+        b_fields = []
+
+        for hdu in hdul_input[1:]:  # Skip primary HDU
+            if hdu.data is not None:
+                array_list.append(hdu.data)
+                b_field = hdu.header.get('B_FIELD', None)
+                b_fields.append(b_field)
+
+        if not array_list:
+            print("No valid HDUs with data found in the selected file.")
+            return
+
+        stacked_array = np.stack(array_list)
+        print(f"Stacked array shape: {stacked_array.shape}")
+
+    # Create and append the new ImageHDU
+    new_hdu = fits.ImageHDU(data=stacked_array, name=hdu_name.upper())
+    new_hdu.header['N_BFIELD'] = len(b_fields)
+    for i, b in enumerate(b_fields):
+        if b is not None:
+            new_hdu.header[f'B{i}'] = b
+
+    with fits.open(fits_path, mode='update') as hdul:
+        hdul.append(new_hdu)
+        hdul.flush()
+
+    print(f"HDU '{hdu_name.upper()}' added successfully.")
+
+
+    
 
 def save_data_to_fits(data_dict, output_path):
     hdus = [fits.PrimaryHDU()]  # Start with an empty primary HDU
@@ -56,7 +199,7 @@ def load_data_from_fits(fits_path, print_summary=False):
 
     return data_dict
 
-def extract_data_from_files(data_dir):
+def extract_data_from_files(data_dir, preprocessed_data_dir=None):
     grouped_data = defaultdict(dict)
     
     def extract_data_from_file(file_path, grouped_data, field_dependent, save_each_scan = False):
@@ -82,45 +225,33 @@ def extract_data_from_files(data_dir):
 
             # Determine if the file is saved for each scan or not
             if save_each_scan:
-                # Extract scan number from filename
-                match = re.search(r'_scan(\d+)', filename)
-                if not match:
-                    print(f"Skipping save each scan file (no match): {filename}")
-                    return
-                scan_number = int(match.group(1))
-
                 # Extract data of E-field and time from the file
                 data = np.loadtxt(file_path, skiprows=2)
-                
+                E_field = data[:, 1]
+
                 if  field_dependent:
-                    E_field = data[:, 1]
                     # Extract field value from filename
                     match = re.search(r'_([-+]?\d*\.?\d+)T', filename)
                     if not match:
                         print(f"Skipping T file (no match): {filename}")
                         return
                     field_value = float(match.group(1))
-                    if field_value not in grouped_data[identifier_line]:
-                        time = data[:, 0]
-                        combined = np.column_stack((time, E_field))
-                        grouped_data[identifier_line][field_value] = {
+                else:
+                    field_value = 0.0
+
+                # Check if the field_value already exists in the grouped_data
+                # Then store the data in the dictionary
+                if field_value not in grouped_data[identifier_line]:
+                    time = data[:, 0]
+                    combined = np.column_stack((time, E_field))
+                    grouped_data[identifier_line][field_value] = {
                             "step_fs": step_fs,
                             "start_ps": start_ps,
                             "delay_ms": delay_ms,
                             "data": combined
-                        }
-                    else:
-                        grouped_data[identifier_line][field_value]["data"] = np.column_stack((grouped_data[identifier_line][field_value]["data"], E_field))
-                else:
-                    time = data[:, 0]
-                    E_field = data[:, 1]
-                    combined = np.column_stack((time, E_field))
-                    grouped_data[identifier_line][scan_number] = {
-                        "step_fs": step_fs,
-                        "start_ps": start_ps,
-                        "delay_ms": delay_ms,
-                        "data": combined
                     }
+                else:
+                    grouped_data[identifier_line][field_value]["data"] = np.column_stack((grouped_data[identifier_line][field_value]["data"], E_field))
             else:
                 # Extract data of E-field from the file
                 E_field = np.loadtxt(file_path, skiprows=2)
@@ -136,7 +267,7 @@ def extract_data_from_files(data_dir):
                     # Extract field value from filename
                     match = re.search(r'_([-+]?\d*\.?\d+)T\.txt$', filename)
                     if not match:
-                        print(f"hello Skipping T file (no match): {filename}")
+                        print(f"Skipping T file (no match): {filename}")
                         return
                     field_value = float(match.group(1))
                 else:
@@ -190,11 +321,15 @@ def extract_data_from_files(data_dir):
         extract_data_from_file(file_path, grouped_data=grouped_data, field_dependent=False)
 
     # --- Save grouped data ---
+    preprocessed_filenames = []
     for identifier, full_data in grouped_data.items():
         output_fits_path = identifier + '.fits'
+        os.makedirs(preprocessed_data_dir, exist_ok=True)
+        output_fits_path = os.path.join(preprocessed_data_dir, output_fits_path)
         save_data_to_fits(full_data, output_fits_path)
+        preprocessed_filenames.append(output_fits_path)
 
-    return grouped_data
+    return preprocessed_filenames
 
 def plot_Efields_from_fits(fits_path, title="E-field vs Time"):
     # Open the FITS file
