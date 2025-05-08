@@ -153,8 +153,12 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
         preprocessed_filenames (list of str): List of full paths to candidate FITS files.
         hdu_name (str): Name to assign to the new HDU (e.g., 'REF1', 'SAMPLE1').
     """
-    print(f"Please select the FITS file to add as HDU (press 's' to skip adding hdu, 'e' to end) '{hdu_name}':", flush=True)
-
+    print("-" * 30)
+    print(f"Please select the FITS file to add as HDU '{hdu_name}':", flush=True)
+    print(f"Press the index number to choose the file to read into the hdu", flush=True)
+    print(f"Press 's' to skip adding this hdu", flush=True)
+    print(f"Press 'n' to read the next zip file", flush=True)
+    print(f"Press 'e' to end the whole process", flush=True)
     for i, full_path in enumerate(preprocessed_filenames):
         print(f"{i}: {full_path}", flush=True)
 
