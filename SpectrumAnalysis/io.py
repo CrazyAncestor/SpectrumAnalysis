@@ -6,6 +6,7 @@ from astropy.io import fits
 from collections import defaultdict
 import zipfile
 import os
+import shutil
 
 def extract_basic_info_and_power(raw_data_dir):
     # Step 2: Extract basic_info.txt
@@ -31,6 +32,23 @@ def extract_basic_info_and_power(raw_data_dir):
         power = -1.0
     return date, author, power
 
+def clear_directory_files(directory):
+    """
+    Clear all files in the specified directory.
+    
+    Args:
+        directory (str): Path to the directory to clear.
+    """
+    for file in os.listdir(directory):
+        file_path = os.path.join(directory, file)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print(f'Failed to delete {file_path}. Reason: {e}')
+
 def process_data_zip(zip_path, metadata_filename ='metadata.fits', raw_data_dir=None, preprocessed_data_dir=None):
     # Step 1: Unzip
     unzip_file(zip_path, extract_to=raw_data_dir)
@@ -41,16 +59,11 @@ def process_data_zip(zip_path, metadata_filename ='metadata.fits', raw_data_dir=
 
     # Step 5: Save the FITS file
     os.makedirs(preprocessed_data_dir, exist_ok=True)
-    fits_path = os.path.join(preprocessed_data_dir, metadata_filename)
+    fits_path = os.path.join('./', metadata_filename)
     hdul.writeto(fits_path, overwrite=True)
 
     # Step 6: Continue processing other data
     preprocessed_filenames = extract_data_from_files(raw_data_dir, preprocessed_data_dir=preprocessed_data_dir)
-
-    # Step 7: Print the preprocessed filenames
-    print("Preprocessed files:")
-    for filename in preprocessed_filenames:
-        print(f" - {filename}")
     
     # Step 8: Add HDU to the FITS file
     hdu_index = 1
@@ -58,13 +71,26 @@ def process_data_zip(zip_path, metadata_filename ='metadata.fits', raw_data_dir=
     while True:
         for hdu_type in ["REF", "SAMPLE"]:
             hdu_name = f"{hdu_type}{hdu_index}"
+            print(hdu.name)
+            if hdu_name in [hdu.name for hdu in fits.open(fits_path)]:
+                print(f"HDU '{hdu_name}' already exists. Skipping...")
+                continue
             result = add_hdu_with_prompt_message(fits_path, preprocessed_filenames, hdu_name)
-            if result == "stop":
+
+            if result == "end":
                 break
+            if result == "skip":
+                continue
         else:
             hdu_index += 1
             continue
         break
+
+    # Clear the raw data directory files
+    clear_directory_files(raw_data_dir)
+    
+    # Clear the preprocessed data directory files
+    clear_directory_files(preprocessed_data_dir)
 
 
 def unzip_file(zip_path, extract_to=None):
@@ -106,17 +132,22 @@ def add_hdu_with_prompt_message(fits_path, preprocessed_filenames, hdu_name="REF
         preprocessed_filenames (list of str): List of full paths to candidate FITS files.
         hdu_name (str): Name to assign to the new HDU (e.g., 'REF1', 'SAMPLE1').
     """
-    print(f"Please select the FITS file to add as HDU (press 's' to stop adding hdu) '{hdu_name}':", flush=True)
+    print(f"Please select the FITS file to add as HDU (press 's' to skip adding hdu, 'e' to end) '{hdu_name}':", flush=True)
 
     for i, full_path in enumerate(preprocessed_filenames):
         print(f"{i}: {full_path}")
 
     # Validate user input
     while True:
+
         input_message = input("Enter the index of the file: ")
+
         if input_message.lower() == 's':
-            print("Stopping the addition of HDU.")
-            return "stop"
+            print("Skipping the addition of HDU.")
+            return "skip"
+        if input_message.lower() == 'e':
+            print("Ending the addition of HDU.")
+            return "end"
         try:
             index = int(input_message)
             if 0 <= index < len(preprocessed_filenames):
@@ -133,6 +164,9 @@ def add_hdu_with_prompt_message(fits_path, preprocessed_filenames, hdu_name="REF
     with fits.open(selected_filename) as hdul_input:
         # Create and append the new ImageHDU
         new_hdu = fits.ImageHDU(header=hdul_input[1].header ,data=hdul_input[1].data, name=hdu_name.upper())
+        
+        # Set the HDU_TYPE keyword in the header
+        new_hdu.header['HDU_TYPE'] = hdu_name.upper()
 
     with fits.open(fits_path, mode='update') as hdul:
         hdul.append(new_hdu.copy())
@@ -292,16 +326,22 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
     # --- Save grouped data ---
     preprocessed_filenames = []
     for identifier, full_data in grouped_data.items():
+
+        # Create a unique filename for each identifier
         output_fits_path = identifier + '.fits'
         os.makedirs(preprocessed_data_dir, exist_ok=True)
         output_fits_path = os.path.join(preprocessed_data_dir, output_fits_path)
+
+        # Extract basic info and power
         basic_info_and_power = extract_basic_info_and_power(raw_data_dir)
-        save_data_to_fits(full_data, output_fits_path, basic_info_and_power)
+
+        # Save the data to a FITS file
+        save_data_to_fits(full_data, output_fits_path, basic_info_and_power, identifier)
         preprocessed_filenames.append(output_fits_path)
 
     return preprocessed_filenames
 
-def save_data_to_fits(data_dict, output_path, basic_info_and_power):
+def save_data_to_fits(data_dict, output_path, basic_info_and_power, identifier):
     hdus = [fits.PrimaryHDU()]  # Start with an empty primary HDU
     
     # Stack the data for each B-field value
@@ -331,16 +371,17 @@ def save_data_to_fits(data_dict, output_path, basic_info_and_power):
     if info0["delay_ms"] is not None:
         hdr['DELAYMS'] = info0["delay_ms"]
 
+    hdr['FILENAME'] = identifier
+
     hdr['N_BFIELD'] = len(B_field_values)
     for i, b in enumerate(B_field_values):
         if b is not None:
             hdr[f'B{i}'] = b
 
-    # Create ImageHDU for each B-field value
-    hdu = fits.ImageHDU(data=data, header=hdr, name=f'{B_field_value:.3f}T')
+    # Create ImageHDU to store the data
+    hdu = fits.ImageHDU(data=data, header=hdr, name=identifier.upper())
     hdus.append(hdu)
     
     # Write to file
     hdul = fits.HDUList(hdus)
     hdul.writeto(output_path, overwrite=True)
-    print(f"Saved to {output_path}")
