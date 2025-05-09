@@ -8,6 +8,35 @@ import zipfile
 import os
 import shutil
 
+def unzip_file(zip_path, extract_to=None):
+    """
+    Extracts all files from a zip archive directly into the target folder,
+    ignoring internal folder structure.
+    
+    Args:
+        zip_path (str): Path to the zip file.
+        extract_to (str, optional): Output folder. Defaults to zip file name (no extension).
+    
+    Returns:
+        str: Path to the extraction directory.
+    """
+    if not extract_to:
+        extract_to = os.path.splitext(zip_path)[0]
+
+    os.makedirs(extract_to, exist_ok=True)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        for member in zip_ref.infolist():
+            if not member.is_dir():
+                # Get just the filename without any internal folders
+                filename = os.path.basename(member.filename)
+                if filename:  # skip if it's an empty name (e.g., directory)
+                    target_path = os.path.join(extract_to, filename)
+                    with zip_ref.open(member) as source, open(target_path, 'wb') as target:
+                        target.write(source.read())
+
+    return extract_to
+
 def extract_basic_info_and_power(raw_data_dir):
     # Step 2: Extract basic_info.txt
     basic_info_path = os.path.join(raw_data_dir, 'basic_info.txt')
@@ -90,6 +119,8 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
         hdu_types = ["REF", "SAMPLE"]
         zip_paths = glob.glob('*.zip')
         preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+
+        print_help_message()
         while True:
             result = "null"
             for i in range(2):
@@ -121,8 +152,21 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
                         if zip_index>= len(zip_paths):
                             zip_index = 0
                         preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+                    if result == "previous_zip":
+                        # Clear the raw data directory files
+                        clear_directory_files(raw_data_dir)
+                        
+                        # Clear the preprocessed data directory files
+                        clear_directory_files(preprocessed_data_dir)
+                        zip_index += -1
+                        if zip_index< 0 :
+                            zip_index = len(zip_paths)-1
+                        preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
                     if result == "success":
                         break
+                    if result == "help":
+                        print_help_message()
+                        continue
                 
                 if result == "end":
                     break
@@ -130,35 +174,20 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
             hdu_index += 1
             if result == "end":
                 break
-
-def unzip_file(zip_path, extract_to=None):
-    """
-    Extracts all files from a zip archive directly into the target folder,
-    ignoring internal folder structure.
     
-    Args:
-        zip_path (str): Path to the zip file.
-        extract_to (str, optional): Output folder. Defaults to zip file name (no extension).
-    
-    Returns:
-        str: Path to the extraction directory.
-    """
-    if not extract_to:
-        extract_to = os.path.splitext(zip_path)[0]
+    # Show the FITS file information
+    print("-" * 30)
+    show_fits_info(fits_path)
 
-    os.makedirs(extract_to, exist_ok=True)
+def print_help_message():
+    print_color_message(f"Press the index number to choose the file to read into the hdu", color_code=33)# yellow
+    print_color_message(f"Press 's' to skip the addition of HDU", color_code=33)
+    print_color_message(f"Press 'e' to end the addition of HDU", color_code=33)
+    print_color_message(f"Press 'n' to go to the next zip file", color_code=33)
+    print_color_message(f"Press 'p' to go to the previous zip file", color_code=33)
 
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        for member in zip_ref.infolist():
-            if not member.is_dir():
-                # Get just the filename without any internal folders
-                filename = os.path.basename(member.filename)
-                if filename:  # skip if it's an empty name (e.g., directory)
-                    target_path = os.path.join(extract_to, filename)
-                    with zip_ref.open(member) as source, open(target_path, 'wb') as target:
-                        target.write(source.read())
-
-    return extract_to
+def print_color_message(text, color_code):
+    print(f"\033[{color_code}m{text}\033[0m", flush=True)
 
 def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
     """
@@ -170,14 +199,14 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
         preprocessed_filenames (list of str): List of full paths to candidate FITS files.
         hdu_name (str): Name to assign to the new HDU (e.g., 'REF1', 'SAMPLE1').
     """
+    # Print the list of available files
     print("-" * 30)
-    print(f"Please select the FITS file to add as HDU '{hdu_name}':", flush=True)
-    print(f"Press the index number to choose the file to read into the hdu", flush=True)
-    print(f"Press 's' to skip adding this hdu", flush=True)
-    print(f"Press 'n' to read the next zip file", flush=True)
-    print(f"Press 'e' to end the whole process", flush=True)
+    print_color_message(f"Please select the FITS file to add as HDU '{hdu_name}' (press 'h' for help):", color_code=35) # magenta
+    print_color_message(f"Available files:", color_code=34)
+    
     for i, full_path in enumerate(preprocessed_filenames):
-        print(f"{i}: {full_path}", flush=True)
+        identifer = os.path.basename(full_path)
+        print_color_message(f"{i}: {identifer}", color_code=32) # green
 
     # Validate user input
     while True:
@@ -193,6 +222,12 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
         if input_message.lower() == 'n':
             print("Go to next zip file.", flush=True)
             return "next_zip"
+        if input_message.lower() == 'p':
+            print("Go to previous zip file.", flush=True)
+            return "previous_zip"
+        if input_message.lower() == 'h':
+            print("Help message", flush=True)
+            return "help"
         try:
             index = int(input_message)
             if 0 <= index < len(preprocessed_filenames):
@@ -445,5 +480,6 @@ def show_fits_info(fits_path):
             print("-" * 30)
             print(f"HDU id: {hdu.name}")
             print(hdu.header['FILENAME'])
+            print(f"Data Date: {hdu.header['DATE']}")
             print(f"Data shape: {hdu.data.shape}")
             
