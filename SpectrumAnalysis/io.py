@@ -15,9 +15,13 @@ def extract_basic_info_and_power(raw_data_dir):
         with open(basic_info_path, 'r') as f:
             date = f.readline().strip()
             author = f.readline().strip()
+            place = f.readline().strip()
+            geometry = f.readline().strip()
     else:
         date = 'UNKNOWN'
         author = 'UNKNOWN'
+        place = 'UNKNOWN'
+        geometry = 'UNKNOWN'
 
     # Step 3: Extract power_log.txt
     power_log_path = os.path.join(raw_data_dir, 'power_log.txt')
@@ -30,7 +34,7 @@ def extract_basic_info_and_power(raw_data_dir):
                 power = -1.0  # fallback
     else:
         power = -1.0
-    return date, author, power
+    return date, author, power, place, geometry
 
 def clear_directory_files(directory):
     """
@@ -55,6 +59,19 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
     os.makedirs(raw_data_dir, exist_ok=True)
     os.makedirs(preprocessed_data_dir, exist_ok=True)
     fits_path = os.path.join('./', metadata_filename)
+
+    if not(os.path.exists(fits_path)):
+        # Create a new FITS file with a PrimaryHDU
+        primary_hdu = fits.PrimaryHDU()
+        primary_hdu.header['FILENAME'] = metadata_filename
+
+        print("1. Author of this metadata: ", flush=True)
+        primary_hdu.header['AUTHOR'] = input("Enter the author of this metadata: ")
+        print("2. Brief description of this project: ", flush=True)
+        primary_hdu.header['PROJECT_GOAL'] = input("Enter the goal of this project: ")
+        
+        hdul = fits.HDUList([primary_hdu])
+        hdul.writeto(fits_path, overwrite=True)
 
     with fits.open(fits_path, mode='update') as hdul:
 
@@ -385,10 +402,12 @@ def save_data_to_fits(data_dict, output_path, basic_info_and_power, identifier):
     # Input header information
     hdr = fits.Header()
 
-    date, author, power = basic_info_and_power
+    date, author, power, place, geometry = basic_info_and_power
     hdr['DATE'] = date
     hdr['AUTHOR'] = author
     hdr['POWER'] = power
+    hdr['PLACE'] = place
+    hdr['GEOMETRY'] = geometry
 
     info0 = data_dict[B_field_values[0]]
     if info0["step_fs"] is not None:
@@ -412,3 +431,19 @@ def save_data_to_fits(data_dict, output_path, basic_info_and_power, identifier):
     # Write to file
     hdul = fits.HDUList(hdus)
     hdul.writeto(output_path, overwrite=True)
+
+def show_fits_info(fits_path):
+    """
+    Prints the information of a FITS file.
+    
+    Args:
+        fits_path (str): Path to the FITS file.
+    """
+    with fits.open(fits_path) as hdul:
+        hdul.info()
+        for hdu in hdul[1:]:
+            print("-" * 30)
+            print(f"HDU id: {hdu.name}")
+            print(hdu.header['FILENAME'])
+            print(f"Data shape: {hdu.data.shape}")
+            
