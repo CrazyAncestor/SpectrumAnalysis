@@ -65,8 +65,9 @@ def read_stat_hdu(fits_file, hdu_id, B_field):
             E_field_avgs = np.array(data[1][0]).reshape(header['N_BFIELD'], int(time_N))
             E_field_stds = np.array(data[2][0]).reshape(header['N_BFIELD'], int(time_N))
             freqs = np.array(data[3][0]).reshape(header['N_BFIELD'], int(freq_N))
-            fft_avgs = np.array(data[4][0]).reshape(header['N_BFIELD'], int(freq_N))
-            fft_stds = np.array(data[5][0]).reshape(header['N_BFIELD'], int(freq_N))
+            fft_avg_reals = np.array(data[4][0]).reshape(header['N_BFIELD'], int(freq_N))
+            fft_avg_imags = np.array(data[5][0]).reshape(header['N_BFIELD'], int(freq_N))
+            fft_stds = np.array(data[6][0]).reshape(header['N_BFIELD'], int(freq_N))
 
             B_field_values = give_B_field_values(header.copy())
         else:
@@ -78,21 +79,21 @@ def read_stat_hdu(fits_file, hdu_id, B_field):
             E_field_avgs = np.array(data[1][0][time_idx])[np.newaxis, :]
             E_field_stds = np.array(data[2][0][time_idx])[np.newaxis, :]
             freqs = np.array(data[3][0][freq_idx])[np.newaxis, :]
-            fft_avgs = np.array(data[4][0][freq_idx])[np.newaxis, :]
-            fft_stds = np.array(data[5][0][freq_idx])[np.newaxis, :]
+            fft_avg_reals = np.array(data[4][0][freq_idx])[np.newaxis, :]
+            fft_avg_imags = np.array(data[5][0][freq_idx])[np.newaxis, :]
+            fft_stds = np.array(data[6][0][freq_idx])[np.newaxis, :]
 
             B_field_values = [give_B_field_values(header.copy())[B_field_idx]]
 
         
 
-    return times, E_field_avgs, E_field_stds, freqs, fft_avgs, fft_stds, B_field_values
+        return times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, header.copy()
 
 def write_data_to_bin_hdu(fits_file, hdu_new_id, hdu_new_type, hdu_new_header, stat_data):
     with fits.open(fits_file, mode='update') as hdul:
 
         # Flatten the arrays
         stat_arrs = [arr.flatten().astype(np.float32) for arr in stat_data]
-
         # Convert to a format that fits understands: an object array
         col = fits.Column(name=hdu_new_id, format='PE()', array=np.array(stat_arrs, dtype=object))
 

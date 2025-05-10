@@ -9,7 +9,8 @@ def statistical_analysis(fits_file, hdu_raw_data_id, time_range=None, B_field=No
     E_field_avgs = []
     E_field_stds = []
     freqs = []
-    fft_avgs = []
+    fft_avg_reals = []
+    fft_avg_imags = []
     fft_stds = []
 
     for B_field_idx in range(raw_data.shape[0]):
@@ -19,10 +20,11 @@ def statistical_analysis(fits_file, hdu_raw_data_id, time_range=None, B_field=No
         E_field_stds = np.append(E_field_stds, E_field_std)
 
         freqs = np.append(freqs, freq)
-        fft_avgs = np.append(fft_avgs, fft_avg)
+        fft_avg_reals = np.append(fft_avg_reals, np.real(fft_avg))
+        fft_avg_imags = np.append(fft_avg_imags, np.imag(fft_avg))
         fft_stds = np.append(fft_stds, fft_std)
 
-    stat_data = [times, E_field_avgs, E_field_stds, freqs, fft_avgs, fft_stds]
+    stat_data = [times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds]
 
     hdu_id_stat = f'STAT_{hdu_raw_data_id}'
     hdu_exist, overwrite_or_not = confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_id_stat, allow_overwrite=True)
@@ -67,8 +69,8 @@ def fft_with_zero_padding(time, td_data, zero_padding_ratio = None):
     fft_result = np.fft.fft(td_data_new, axis=0)                 # Shape: (frequencies, scan)
 
     # Average and std across frequency bins per component
-    fft_avg = np.abs(np.mean(fft_result, axis=1))                 # Shape: (scan,)
-    fft_std = np.abs(np.std(fft_result, axis=1))                # Shape: (scan,)
+    fft_avg = np.mean(fft_result, axis=1)                 # Shape: (scan,)
+    fft_std = np.std(fft_result, axis=1)                # Shape: (scan,)
 
     # sort the frequency values and corresponding FFT results
     sort_indices = np.argsort(freq)
