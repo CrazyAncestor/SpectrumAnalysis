@@ -22,6 +22,14 @@ def find_B_field_idx(fits_file, hdu_id, B_field=None):
             raise ValueError(f"B-field {B_field} not found in the list.")
     return B_field_idx
 
+def give_B_field_values(fits_file, hdu_id,):
+
+    with fits.open(fits_file) as hdul:
+        header = hdul[hdu_id].header
+        b_field_list = [header[f'B{i}'] for i in range(0, header['N_BFIELD'])]
+    
+    return b_field_list
+
 def confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_id, allow_overwrite=False):
     with fits.open(fits_file) as hdul:
         if hdu_id not in hdul:
@@ -141,36 +149,46 @@ def plot_avg_std_from_fits(fits_file, hdu_id, B_field=None, time_range=None, plo
 
 def plot_transmission_spec(fits_file, hdu_id_tr, hdu_id_ref, B_field=None, plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
     
-    B_field_idx_ref = find_B_field_idx(fits_file, hdu_id_ref, B_field=0.)
-    B_field_idx_tr = find_B_field_idx(fits_file, hdu_id_tr, B_field)
-    
-    # Extract time and frequency data
-    time, E_field_avg_ref, E_field_std_ref, freq, fft_avg_ref, fft_std_ref = load_stat_data_from_fits_file(fits_file, hdu_id_ref, B_field_idx_ref, allow_overwrite=False)
-    time, E_field_avg_tr, E_field_std_tr, freq, fft_avg_tr, fft_std_tr = load_stat_data_from_fits_file(fits_file, hdu_id_tr, B_field_idx_tr, allow_overwrite=False)
-    # Calculate transmission spectrum
-    transmission_avg = np.abs(fft_avg_tr / fft_avg_ref) 
-    transmission_std = np.array(transmission_avg * ((fft_std_tr/fft_avg_tr)**2 + (fft_std_ref/fft_avg_ref)**2)**0.5)
-    
     plt.figure(figsize=(10, 4))
-    if plot_only_positive_freq:
-        freq_mask = freq > 0
-        freq = freq[freq_mask]
-        transmission_avg = transmission_avg[freq_mask]
-        transmission_std = transmission_std[freq_mask]
-    if freq_range is not None:
-        freq_mask = (freq >= freq_range[0]) & (freq <= freq_range[1])
-        freq = freq[freq_mask]
-        transmission_avg = transmission_avg[freq_mask]
-        transmission_std = transmission_std[freq_mask]
-    plt.plot(freq, transmission_avg, label='Transmission Spectrum')
-    plt.fill_between(freq, transmission_avg - transmission_std, transmission_avg + transmission_std, alpha=0.2, label='Transmission Std Dev')
+    def plot_spec_of_some_field(B_field):
+        B_field_idx_ref = find_B_field_idx(fits_file, hdu_id_ref, B_field=0.)
+        B_field_idx_tr = find_B_field_idx(fits_file, hdu_id_tr, B_field=B_field)
+        
+        # Extract time and frequency data
+        time, E_field_avg_ref, E_field_std_ref, freq, fft_avg_ref, fft_std_ref = load_stat_data_from_fits_file(fits_file, hdu_id_ref, B_field_idx_ref, allow_overwrite=False)
+        time, E_field_avg_tr, E_field_std_tr, freq, fft_avg_tr, fft_std_tr = load_stat_data_from_fits_file(fits_file, hdu_id_tr, B_field_idx_tr, allow_overwrite=False)
+        # Calculate transmission spectrum
+        transmission_avg = np.abs(fft_avg_tr / fft_avg_ref) 
+        transmission_std = np.array(transmission_avg * ((fft_std_tr/fft_avg_tr)**2 + (fft_std_ref/fft_avg_ref)**2)**0.5)
+        
+        
+        if plot_only_positive_freq:
+            freq_mask = freq > 0
+            freq = freq[freq_mask]
+            transmission_avg = transmission_avg[freq_mask]
+            transmission_std = transmission_std[freq_mask]
+        if freq_range is not None:
+            freq_mask = (freq >= freq_range[0]) & (freq <= freq_range[1])
+            freq = freq[freq_mask]
+            transmission_avg = transmission_avg[freq_mask]
+            transmission_std = transmission_std[freq_mask]
+        plt.plot(freq, transmission_avg, label=f'B={B_field}T')
+        plt.fill_between(freq, transmission_avg - transmission_std, transmission_avg + transmission_std, alpha=0.2)
+
+    if B_field=='all':
+        B_fields = give_B_field_values(fits_file, hdu_id_tr)
+        for i in range(len(B_fields)):
+            plot_spec_of_some_field(B_fields[i])
+    else:
+        plot_spec_of_some_field(B_field)
+    
     plt.xlabel('Frequency (THz)')
     plt.ylabel('Transmission (arb. units)')
     if title is not None:
         plt.title(title)
     else:
         plt.title('Transmission Spectrum')
-    plt.legend()
+    plt.legend(loc = 'best')
     plt.grid()
     plt.tight_layout()
     if save_path is None:
