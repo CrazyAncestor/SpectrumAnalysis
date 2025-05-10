@@ -1,11 +1,37 @@
 import numpy as np
 from astropy.io import fits
+from .util import read_image_hdu, write_data_to_bin_hdu, confirm_whether_hdu_exist_and_if_overwrite
 
-def avg_std_of_time_freq_domain(fits_file, hdu_id = None, time_range=None, B_field=None, zero_padding_ratio=None):
+def statistical_analysis(fits_file, hdu_raw_data_id, time_range=None, B_field=None, zero_padding_ratio=None):
+    raw_data_header, raw_data = read_image_hdu(fits_file, hdu_raw_data_id)
 
-    def avg_std(data, time_range):
-        time = data[ :, 0]
-        E_field = data[ :, 1:]
+    times = []
+    E_field_avgs = []
+    E_field_stds = []
+    freqs = []
+    fft_avgs = []
+    fft_stds = []
+
+    for B_field_idx in range(raw_data.shape[0]):
+        time, E_field_avg, E_field_std, freq, fft_avg, fft_std = avg_std_of_time_freq_data(raw_data = raw_data[B_field_idx,:,:], reference_time=raw_data[0,:,0], time_range=time_range, zero_padding_ratio=zero_padding_ratio)
+        times = np.append(times, time)
+        E_field_avgs = np.append(E_field_avgs, E_field_avg)
+        E_field_stds = np.append(E_field_stds, E_field_std)
+
+        freqs = np.append(freqs, freq)
+        fft_avgs = np.append(fft_avgs, fft_avg)
+        fft_stds = np.append(fft_stds, fft_std)
+
+    stat_data = [times, E_field_avgs, E_field_stds, freqs, fft_avgs, fft_stds]
+
+    hdu_id_stat = f'STAT_{hdu_raw_data_id}'
+    hdu_exist, overwrite_or_not = confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_id_stat, allow_overwrite=True)
+    if hdu_exist==False or overwrite_or_not==True:
+        write_data_to_bin_hdu(fits_file = fits_file, hdu_new_id = hdu_id_stat, hdu_new_type='STAT', hdu_new_header=raw_data_header, stat_data=stat_data)
+
+def avg_std_of_time_freq_data(raw_data, reference_time, time_range, zero_padding_ratio):
+        time = reference_time # Ensure the time is homogeneous
+        E_field = raw_data[ :, 1:]
 
         # Apply time range filtering
         if time_range is not None:
@@ -24,46 +50,6 @@ def avg_std_of_time_freq_domain(fits_file, hdu_id = None, time_range=None, B_fie
         N, freq, fft_avg, fft_std =  fft_with_zero_padding(time, E_field, zero_padding_ratio = zero_padding_ratio)
 
         return np.array(time), np.array(E_field_avg), np.array(E_field_std), np.array(freq), np.array(fft_avg), np.array(fft_std)
-    
-    with fits.open(fits_file, mode='update') as hdul:
-        hdu = hdul[hdu_id]
-        times = []
-        E_field_avgs = []
-        E_field_stds = []
-        freqs = []
-        fft_avgs = []
-        fft_stds = []
-        for B_field_idx in range(hdu.data.shape[0]):
-            data = hdu.data[B_field_idx, :, :]
-            time, E_field_avg, E_field_std, freq, fft_avg, fft_std = avg_std(data, time_range)
-            times = np.append(times, time)
-            E_field_avgs = np.append(E_field_avgs, E_field_avg)
-            E_field_stds = np.append(E_field_stds, E_field_std)
-
-            freqs = np.append(freqs, freq)
-            fft_avgs = np.append(fft_avgs, fft_avg)
-            fft_stds = np.append(fft_stds, fft_std)
-        
-        print(f"Times.shape: {times.shape}")
-        
-        # Flatten the arrays
-        stat_data = [times, E_field_avgs, E_field_stds, freqs, fft_avgs, fft_stds]
-        stat_data = [arr.flatten().astype(np.float32) for arr in stat_data]
-
-        # Convert to a format that fits understands: an object array
-        col = fits.Column(name='STAT_'+hdu_id, format='PE()', array=np.array(stat_data, dtype=object))
-
-        # Make a binary table
-        hdu_new = fits.BinTableHDU.from_columns([col])
-        hdu_new.header = hdu.header.copy()
-        hdu_new.header['EXTNAME'] = 'STAT_' + str(hdu_id)
-        hdu_new.header['HDU_TYPE'] = 'STAT_' + str(hdu_id)
-        print(f"Adding {hdu_new.name} to the FITS file.")
-        print(hdu_new.header)
-
-        # Append the new HDU to the original HDU list
-        hdul.append(hdu_new.copy())
-
 
 def fft_with_zero_padding(time, td_data, zero_padding_ratio = None):
     if zero_padding_ratio is None:
@@ -89,6 +75,5 @@ def fft_with_zero_padding(time, td_data, zero_padding_ratio = None):
     freq = freq[sort_indices]
     fft_avg = fft_avg[sort_indices]
     fft_std = fft_std[sort_indices]
-
 
     return N, freq, fft_avg, fft_std

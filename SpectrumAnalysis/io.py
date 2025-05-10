@@ -116,7 +116,7 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
         hdu_index = 1
         zip_index = 0
 
-        hdu_types = ["REF", "SAMPLE"]
+        hdu_name_prefix = ["REF", "SAMPLE"]
         zip_paths = glob.glob('*.zip')
         preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
 
@@ -124,7 +124,7 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
         while True:
             result = "null"
             for i in range(2):
-                hdu_name = f"{hdu_types[i]}{hdu_index}"
+                hdu_name = f"{hdu_name_prefix[i]}{hdu_index}"
                 
                 if hdu_name in [hdu.name for hdu in hdul]:
                     print(f"HDU '{hdu_name}' already exists. Skipping...", flush=True)
@@ -245,8 +245,8 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
         # Create and append the new ImageHDU
         new_hdu = fits.ImageHDU(header=hdul_input[1].header ,data=hdul_input[1].data, name=hdu_name.upper())
         
-        # Set the HDU_TYPE keyword in the header
-        new_hdu.header['HDU_TYPE'] = hdu_name.upper()
+        # Set the HDU_TYPE to be RAW_DATA
+        new_hdu.header['HDU_TYPE'] = 'RAW_DATA'
 
     # Append the new HDU to the original FITS file
     hdul.append(new_hdu.copy())
@@ -485,38 +485,3 @@ def show_fits_info(fits_path):
             print(f"Magnetic field values: {hdu.header['N_BFIELD']}")
             for i in range(hdu.header['N_BFIELD']):
                 print(f"B{i}: {hdu.header[f'B{i}']}")
-
-def delete_hdu_from_fits(fits_file, hdu_name, output_file=None):
-    """
-    Deletes an HDU from a FITS file by its name.
-
-    Parameters:
-        fits_file (str): Path to the input FITS file.
-        hdu_name (str): Name of the HDU to delete.
-        output_file (str, optional): Path to save the modified FITS file. 
-                                     If None, the original file will be overwritten.
-
-    Returns:
-        None
-    """
-    # Open the FITS file
-    with fits.open(fits_file, mode='update') as hdul:
-        # Find the HDU by name
-        hdu_index = None
-        for i, hdu in enumerate(hdul):
-            if hdu.name == hdu_name:
-                hdu_index = i
-                break
-        
-        # Check if the HDU was found
-        if hdu_index is None:
-            raise ValueError(f"HDU with name '{hdu_name}' not found in the FITS file.")
-        
-        # Delete the specified HDU
-        del hdul[hdu_index]
-        
-        # Save changes to the file
-        if output_file:
-            hdul.writeto(output_file, overwrite=True)
-        else:
-            hdul.flush()
