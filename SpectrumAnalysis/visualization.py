@@ -89,7 +89,7 @@ def plot_transmission_spec(fits_file, hdu_tr_id, hdu_ref_id, B_field=None, plot_
     for i in range(freqs.shape[0]):
     # Calculate transmission spectrum
         transmission_avg = (fft_avg_real_trs[i]**2 + fft_avg_imag_trs[i]**2) / (fft_avg_real_refs[0]**2 + fft_avg_imag_refs[0]**2)
-        transmission_std = np.array(transmission_avg * (np.abs(fft_std_trs[i])**2/(fft_avg_real_trs[i]**2 + fft_avg_imag_trs[i]**2) + \
+        transmission_std = 2 * np.array(transmission_avg * (np.abs(fft_std_trs[i])**2/(fft_avg_real_trs[i]**2 + fft_avg_imag_trs[i]**2) + \
                                                         np.abs(fft_std_refs[0])**2/(fft_avg_real_refs[0]**2 + fft_avg_imag_refs[0]**2) )**0.5)
         
         if plot_only_positive_freq:
