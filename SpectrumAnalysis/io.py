@@ -482,4 +482,41 @@ def show_fits_info(fits_path):
             print(hdu.header['FILENAME'])
             print(f"Data Date: {hdu.header['DATE']}")
             print(f"Data shape: {hdu.data.shape}")
-            
+            print(f"Magnetic field values: {hdu.header['N_BFIELD']}")
+            for i in range(hdu.header['N_BFIELD']):
+                print(f"B{i}: {hdu.header[f'B{i}']}")
+
+def delete_hdu_from_fits(fits_file, hdu_name, output_file=None):
+    """
+    Deletes an HDU from a FITS file by its name.
+
+    Parameters:
+        fits_file (str): Path to the input FITS file.
+        hdu_name (str): Name of the HDU to delete.
+        output_file (str, optional): Path to save the modified FITS file. 
+                                     If None, the original file will be overwritten.
+
+    Returns:
+        None
+    """
+    # Open the FITS file
+    with fits.open(fits_file, mode='update') as hdul:
+        # Find the HDU by name
+        hdu_index = None
+        for i, hdu in enumerate(hdul):
+            if hdu.name == hdu_name:
+                hdu_index = i
+                break
+        
+        # Check if the HDU was found
+        if hdu_index is None:
+            raise ValueError(f"HDU with name '{hdu_name}' not found in the FITS file.")
+        
+        # Delete the specified HDU
+        del hdul[hdu_index]
+        
+        # Save changes to the file
+        if output_file:
+            hdul.writeto(output_file, overwrite=True)
+        else:
+            hdul.flush()
