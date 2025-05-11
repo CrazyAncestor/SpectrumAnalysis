@@ -83,7 +83,7 @@ def clear_directory_files(directory):
         except Exception as e:
             print(f'Failed to delete {file_path}. Reason: {e}')
 
-def combine_arrays_of_differnt_shape(arrays):
+def combine_arrays_of_differnt_shape(arrays, filename):
     """
     Combines a list of NumPy arrays along axis 0.
     If arrays differ in size along axis 2, asks the user whether to truncate.
@@ -94,15 +94,16 @@ def combine_arrays_of_differnt_shape(arrays):
     Returns:
         np.ndarray: Combined array along axis 0, or None if user declines truncation.
     """
+    print(f"Processing file {filename}",flush=True)
     # Get shapes along axis 2
     axis2_lengths = [arr.shape[2] for arr in arrays if arr.ndim >= 3]
 
     if len(set(axis2_lengths)) > 1:
-        print("Arrays differ in shape along axis 2:")
+        print("Arrays differ in shape along axis 2:",flush=True)
         for i, arr in enumerate(arrays):
             print(f"  Array {i}: shape = {arr.shape}")
         
-        print("The two data have different shapes. Do you want to truncate all arrays to the smallest length on axis 2? (y/n): ")
+        print("The two data have different shapes. Do you want to truncate all arrays to the smallest length on axis 2? (y/n): ",flush=True)
         answer = input("Do you want to truncate all arrays to the smallest length on axis 2? (y/n): ").strip().lower()
         
         if answer != 'y':
@@ -110,7 +111,7 @@ def combine_arrays_of_differnt_shape(arrays):
             return None
         
         min_len = min(axis2_lengths)
-        print(f"Truncating all arrays to axis 2 size: {min_len}")
+        print(f"Truncating all arrays to axis 2 size: {min_len}",flush=True)
         arrays = [arr[:, :, :min_len] if arr.shape[2] > min_len else arr for arr in arrays]
 
     # Combine on axis 0
@@ -138,42 +139,47 @@ def combine_preprocessed_fits(fits1, fits2):
 
         # update data
         data_old = hdu.data.copy()
-        data_new = combine_arrays_of_differnt_shape(arrays=[data_old, data_to_be_combined])
+        data_new = combine_arrays_of_differnt_shape(arrays=[data_old, data_to_be_combined], filename=fits2)
         hdu.data = data_new
     time.sleep(0.1)
     os.remove(fits1)
 
 
-def prompt_and_combine_fits_with_similar_names(filenames):
 
+def prompt_and_combine_fits_with_similar_names(filenames):
     """
     Given a list of .fits filenames, find all related files (same base name),
     and ask the user if they want to combine the data.
-    
+
     Parameters:
-        filenames (List[str]): A list of .fits filenames.
+        filenames (List[str]): A list of full .fits file paths.
     """
 
     # Extract unique base names (e.g., "abcd" from "abcd.fits" and "abcd_0T.fits")
     base_names = set()
     for fname in filenames:
         if fname.endswith('.fits'):
-            base = fname.split('.')[0].split('_')[0]
+            just_name = os.path.basename(fname)
+            base = just_name.split('.')[0].split('_')[0]
             base_names.add(base)
 
     for base in base_names:
-        matching_files = [f for f in filenames if f.startswith(base) and f.endswith('.fits')]
-        shortest_file = min(matching_files, key=len)
+        matching_files = [f for f in filenames if os.path.basename(f).startswith(base) and f.endswith('.fits')]
+        if not matching_files:
+            continue
+
+        shortest_file = min(matching_files, key=lambda f: len(os.path.basename(f)))
         matching_files.remove(shortest_file)
         matching_files.insert(0, shortest_file)
+
         if len(matching_files) > 1:
-            print(f"\nFound related FITS files for base '{base}':")
+            print(f"\nFound related FITS files for base '{base}':", flush=True)
             for f in matching_files:
-                print(f"  {f}")
-            print(f"Do you want to combine data from these files? (y/n): ", flush=True)
-            answer = input(f"Do you want to combine data from these files? (y/n): ").strip().lower()
+                print(f"  {os.path.basename(f)}")
+
+            answer = input("Do you want to combine data from these files? (y/n): ").strip().lower()
             if answer == 'y':
-                print(f"Combining data for: {', '.join(matching_files)}")
+                print(f"Combining data for: {', '.join([os.path.basename(f) for f in matching_files])}",flush=True)
                 for f in matching_files[1:]:
                     combine_preprocessed_fits(f, shortest_file)
                     filenames.remove(f)
@@ -536,7 +542,7 @@ def save_data_to_fits(data_dict, output_path, basic_info_and_power, identifier):
         arr = arr[np.newaxis,:]
         arrs.append(arr)
 
-    data = combine_arrays_of_differnt_shape(arrs)
+    data = combine_arrays_of_differnt_shape(arrs, output_path)
 
     # Input header information
     hdr = fits.Header()
