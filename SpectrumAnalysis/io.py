@@ -7,6 +7,7 @@ from collections import defaultdict
 import zipfile
 import os
 import shutil
+import time
 
 def unzip_file(zip_path, extract_to=None):
     """
@@ -82,6 +83,103 @@ def clear_directory_files(directory):
         except Exception as e:
             print(f'Failed to delete {file_path}. Reason: {e}')
 
+def combine_arrays_of_differnt_shape(arrays):
+    """
+    Combines a list of NumPy arrays along axis 0.
+    If arrays differ in size along axis 2, asks the user whether to truncate.
+    
+    Parameters:
+        arrays (List[np.ndarray]): List of NumPy arrays to combine.
+    
+    Returns:
+        np.ndarray: Combined array along axis 0, or None if user declines truncation.
+    """
+    # Get shapes along axis 2
+    axis2_lengths = [arr.shape[2] for arr in arrays if arr.ndim >= 3]
+
+    if len(set(axis2_lengths)) > 1:
+        print("Arrays differ in shape along axis 2:")
+        for i, arr in enumerate(arrays):
+            print(f"  Array {i}: shape = {arr.shape}")
+        
+        print("The two data have different shapes. Do you want to truncate all arrays to the smallest length on axis 2? (y/n): ")
+        answer = input("Do you want to truncate all arrays to the smallest length on axis 2? (y/n): ").strip().lower()
+        
+        if answer != 'y':
+            print("Aborting combination.")
+            return None
+        
+        min_len = min(axis2_lengths)
+        print(f"Truncating all arrays to axis 2 size: {min_len}")
+        arrays = [arr[:, :, :min_len] if arr.shape[2] > min_len else arr for arr in arrays]
+
+    # Combine on axis 0
+    return np.concatenate(arrays, axis=0)
+
+def combine_preprocessed_fits(fits1, fits2):
+    B_fields_new = []
+    with fits.open(fits1, mode='readonly') as hdul:
+        hdu = hdul[1].copy()
+        header = hdu.header.copy()
+        data_to_be_combined = hdu.data.copy()
+        n_increase = header['N_BFIELD']
+        for i in range(n_increase):
+            B_fields_new.append(header[f'B{i}'])
+    time.sleep(0.1)
+    with fits.open(fits2, mode='update') as hdul:
+        hdu = hdul[1]
+
+        # update header
+        header = hdu.header
+        n_old = header['N_BFIELD']
+        for i in range(n_increase):
+            header[f'B{i + n_old}'] = B_fields_new[i]
+        header['N_BFIELD'] = n_old + n_increase
+
+        # update data
+        data_old = hdu.data.copy()
+        data_new = combine_arrays_of_differnt_shape(arrays=[data_old, data_to_be_combined])
+        hdu.data = data_new
+    time.sleep(0.1)
+    os.remove(fits1)
+
+
+def prompt_and_combine_fits_with_similar_names(filenames):
+
+    """
+    Given a list of .fits filenames, find all related files (same base name),
+    and ask the user if they want to combine the data.
+    
+    Parameters:
+        filenames (List[str]): A list of .fits filenames.
+    """
+
+    # Extract unique base names (e.g., "abcd" from "abcd.fits" and "abcd_0T.fits")
+    base_names = set()
+    for fname in filenames:
+        if fname.endswith('.fits'):
+            base = fname.split('.')[0].split('_')[0]
+            base_names.add(base)
+
+    for base in base_names:
+        matching_files = [f for f in filenames if f.startswith(base) and f.endswith('.fits')]
+        shortest_file = min(matching_files, key=len)
+        matching_files.remove(shortest_file)
+        matching_files.insert(0, shortest_file)
+        if len(matching_files) > 1:
+            print(f"\nFound related FITS files for base '{base}':")
+            for f in matching_files:
+                print(f"  {f}")
+            print(f"Do you want to combine data from these files? (y/n): ", flush=True)
+            answer = input(f"Do you want to combine data from these files? (y/n): ").strip().lower()
+            if answer == 'y':
+                print(f"Combining data for: {', '.join(matching_files)}")
+                for f in matching_files[1:]:
+                    combine_preprocessed_fits(f, shortest_file)
+                    filenames.remove(f)
+            else:
+                print("Skipping.")
+
 def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',preprocessed_data_dir='preprocessed_data'):
 
     # Step 5: Save the FITS file
@@ -120,7 +218,10 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
 
         hdu_name_prefix = ["REF", "SAMPLE"]
         zip_paths = glob.glob('*.zip')
+        if len(zip_paths)==0:
+            raise ValueError("No zip file found in the current folder!")
         preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+        prompt_and_combine_fits_with_similar_names(preprocessed_filenames)
 
         print_help_message()
         while True:
@@ -426,15 +527,16 @@ def save_data_to_fits(data_dict, output_path, basic_info_and_power, identifier):
     hdus = [fits.PrimaryHDU()]  # Start with an empty primary HDU
     
     # Stack the data for each B-field value
-    data = []
+    arrs = []
     B_field_values = []
 
     for B_field_value, info in sorted(data_dict.items()):
         B_field_values.append(B_field_value)
-        data.append(info["data"])
+        arr = np.array(info["data"])
+        arr = arr[np.newaxis,:]
+        arrs.append(arr)
 
-    #stacked_data = np.stack(data, axis=0)
-
+    data = combine_arrays_of_differnt_shape(arrs)
 
     # Input header information
     hdr = fits.Header()
