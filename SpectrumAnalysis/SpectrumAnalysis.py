@@ -1,6 +1,6 @@
 from .io import process_data_zip, show_fits_info
 from SpectrumAnalysis.util import delete_hdu_from_fits, rename_hdu_from_fits, read_stat_hdu, write_data_to_bin_hdu, raw_stat_hdu_name
-from SpectrumAnalysis.visualization import plot_avg_std_from_fits, plot_transmission_spec
+from SpectrumAnalysis.visualization import plot_statistics, plot_SN_ratio, plot_transmission_spec
 from .HDU_DATA import HDU_DATA
 import numpy as np
 
@@ -22,10 +22,12 @@ class SpectrumAnalysis:
 
     #   Visualization
     def plot_statistics(self, hdu_id, B_field=0., calculate_from_raw_data=True, time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
-        plot_avg_std_from_fits(fits_file = self.metadata_filename, hdu_id=hdu_id, B_field=B_field, calculate_from_raw_data= calculate_from_raw_data,\
+        plot_statistics(fits_file = self.metadata_filename, hdu_id=hdu_id, B_field=B_field, calculate_from_raw_data= calculate_from_raw_data,\
                                 time_range=time_range, plot_only_positive_freq=plot_only_positive_freq,\
                                freq_range = freq_range, zero_padding_ratio=zero_padding_ratio, title=title, save_fig=save_fig, save_path=save_path)
-    
+    def plot_SN_ratio(self, hdu_id, B_field=0., plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
+        plot_SN_ratio(fits_file = self.metadata_filename, hdu_id=hdu_id, B_field=B_field, plot_only_positive_freq=plot_only_positive_freq,\
+                       freq_range = freq_range, title=title, save_fig=save_fig, save_path=save_path)
     def plot_transmission_spec(self, hdu_tr_id, hdu_ref_id, B_field=None, plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
         plot_transmission_spec(self.metadata_filename, hdu_tr_id=hdu_tr_id, hdu_ref_id=hdu_ref_id, B_field=B_field, plot_only_positive_freq=plot_only_positive_freq,\
                                freq_range=freq_range, title= title, save_fig=save_fig, save_path=save_path)

@@ -3,13 +3,13 @@ import numpy as np
 from .util import raw_stat_hdu_name, read_stat_hdu
 from .statistics import statistical_analysis
 
-def plot_avg_std_from_fits(fits_file, hdu_id, B_field=0., calculate_from_raw_data=True, time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
+def plot_statistics(fits_file, hdu_id, B_field=0., calculate_from_raw_data=True, time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
     
-    # Determine whether to do new statistical analysis or read current stat hdu
+    # First do statistical analysis
     hdu_raw_data_id, hdu_stat_id = raw_stat_hdu_name(hdu_id)
-    
     if calculate_from_raw_data:
         statistical_analysis(fits_file, hdu_raw_data_id, time_range, B_field, zero_padding_ratio)
+    # Then read the hdu data
     times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, _ = read_stat_hdu(fits_file, hdu_stat_id, B_field)
 
 
@@ -41,13 +41,18 @@ def plot_avg_std_from_fits(fits_file, hdu_id, B_field=0., calculate_from_raw_dat
 
     # Plot frequency-domain data
     plt.figure(figsize=(10, 4))
+
     for i in range(freqs.shape[0]):
+        freq = freqs[i]
+        fft_avg_real = fft_avg_reals[i]
+        fft_avg_imag = fft_avg_imags[i]
+        fft_std = fft_stds[i]
         if plot_only_positive_freq:
-            freq_mask = freqs[i] > 0
-            freq = freqs[i][freq_mask]
-            fft_avg_real = fft_avg_reals[i][freq_mask]
-            fft_avg_imag = fft_avg_imags[i][freq_mask]
-            fft_std = fft_stds[i][freq_mask]
+            freq_mask = freq > 0
+            freq = freq[freq_mask]
+            fft_avg_real = fft_avg_real[freq_mask]
+            fft_avg_imag = fft_avg_imag[freq_mask]
+            fft_std = fft_std[freq_mask]
         if freq_range is not None:
             freq_mask = (freq >= freq_range[0]) & (freq <= freq_range[1])
             freq = freq[freq_mask]
@@ -78,6 +83,83 @@ def plot_avg_std_from_fits(fits_file, hdu_id, B_field=0., calculate_from_raw_dat
     # Close all plots
     plt.close('all')
     print(f"Plots saved to {save_path}.")
+
+def plot_SN_ratio(fits_file, hdu_id, B_field=0., plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
+    
+    # Extract HDU data
+    hdu_raw_data_id, hdu_stat_id = raw_stat_hdu_name(hdu_id)
+    times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, _ = read_stat_hdu(fits_file, hdu_stat_id, B_field)
+
+
+    # Plot time-domain SN ratio
+    plt.figure(figsize=(10, 4))
+
+    plt.figure(figsize=(10, 4))
+    for i in range(freqs.shape[0]):
+        plt.plot(times[i], E_field_avgs[i]/E_field_stds[i], label=f'B={B_field_values[i]}T')
+    plt.xlabel('Time (ps)')
+    plt.ylabel('E-field S/N ratio (arb. units)')
+    if title is not None:
+        plt.title(title)
+    else:
+        plt.title('E-field time-domain data S/N ratio')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+
+    if save_path is None:
+        save_path = './'
+
+    if save_fig:
+        plt.savefig(save_path + f'/{title}_E_field_time_domain_sn.png')
+    else:
+        plt.show()
+
+
+    # Plot frequency-domain data
+    plt.figure(figsize=(10, 4))
+
+    for i in range(freqs.shape[0]):
+        freq = freqs[i]
+        fft_avg_real = fft_avg_reals[i]
+        fft_avg_imag = fft_avg_imags[i]
+        fft_std = fft_stds[i]
+        if plot_only_positive_freq:
+            freq_mask = freq > 0
+            freq = freq[freq_mask]
+            fft_avg_real = fft_avg_real[freq_mask]
+            fft_avg_imag = fft_avg_imag[freq_mask]
+            fft_std = fft_std[freq_mask]
+        if freq_range is not None:
+            freq_mask = (freq >= freq_range[0]) & (freq <= freq_range[1])
+            freq = freq[freq_mask]
+            fft_avg_real = fft_avg_real[freq_mask]
+            fft_avg_imag = fft_avg_imag[freq_mask]
+            fft_std = fft_std[freq_mask]
+        fft_avg = np.abs(fft_avg_real**2 +fft_avg_imag**2)**0.5
+        fft_std = np.abs(fft_std)
+        plt.plot(freq, fft_avg/fft_std, label=f'B={B_field_values[i]}T')
+    plt.xlabel('Frequency (THz)')
+    plt.ylabel('Amplitude S/N ratio (arb. units)')
+    if title is not None:
+        plt.title(title)
+    else:
+        plt.title('FFT S/N ratio of E-field')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+
+    if save_path is None:
+        save_path = './'
+
+    if save_fig:
+        plt.savefig(save_path + f'/{title}_FFT_sn.png')
+    else:
+        plt.show()
+    # Close all plots
+    plt.close('all')
+    print(f"Plots saved to {save_path}.")
+
 
 def plot_transmission_spec(fits_file, hdu_tr_id, hdu_ref_id, B_field=None, plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
     # Power Transmission
