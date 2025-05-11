@@ -167,6 +167,10 @@ def plot_transmission_spec(fits_file, hdu_tr_id, hdu_ref_id, B_field=None, plot_
     times, E_field_avg_refs, E_field_std_refs, freqs, fft_avg_real_refs, fft_avg_imag_refs, fft_std_refs, B_field_values, _ = read_stat_hdu(fits_file, hdu_ref_id, B_field= 0.0)
     times, E_field_avg_trs, E_field_std_trs, freqs, fft_avg_real_trs, fft_avg_imag_trs, fft_std_trs, B_field_values, _ = read_stat_hdu(fits_file, hdu_tr_id, B_field=B_field)
 
+    x = []
+    y_avg = []
+    y_std = []
+
     plt.figure(figsize=(10, 4))
     for i in range(freqs.shape[0]):
     # Calculate transmission spectrum
@@ -186,6 +190,9 @@ def plot_transmission_spec(fits_file, hdu_tr_id, hdu_ref_id, B_field=None, plot_
             transmission_std = transmission_std[freq_mask]
         plt.plot(freq, transmission_avg, label=f'B={B_field_values[i]}T')
         plt.fill_between(freq, transmission_avg - transmission_std, transmission_avg + transmission_std, alpha=0.2)
+        x.append(freq)
+        y_avg.append(transmission_avg)
+        y_std.append(transmission_std)
     
     plt.xlabel('Frequency (THz)')
     plt.ylabel('Transmission (arb. units)')
@@ -206,3 +213,4 @@ def plot_transmission_spec(fits_file, hdu_tr_id, hdu_ref_id, B_field=None, plot_
     # Close all plots
     plt.close('all')
     
+    return x, y_avg, y_std

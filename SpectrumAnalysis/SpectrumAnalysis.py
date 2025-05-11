@@ -29,8 +29,9 @@ class SpectrumAnalysis:
         plot_SN_ratio(fits_file = self.metadata_filename, hdu_id=hdu_id, B_field=B_field, plot_only_positive_freq=plot_only_positive_freq,\
                        freq_range = freq_range, title=title, save_fig=save_fig, save_path=save_path)
     def plot_transmission_spec(self, hdu_tr_id, hdu_ref_id, B_field=None, plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
-        plot_transmission_spec(self.metadata_filename, hdu_tr_id=hdu_tr_id, hdu_ref_id=hdu_ref_id, B_field=B_field, plot_only_positive_freq=plot_only_positive_freq,\
+        freqs, trans_avg, trans_std = plot_transmission_spec(self.metadata_filename, hdu_tr_id=hdu_tr_id, hdu_ref_id=hdu_ref_id, B_field=B_field, plot_only_positive_freq=plot_only_positive_freq,\
                                freq_range=freq_range, title= title, save_fig=save_fig, save_path=save_path)
+        return freqs, trans_avg, trans_std
 
     #   Calculation on HDUs
     def read_hdu_data(self, hdu_id):
