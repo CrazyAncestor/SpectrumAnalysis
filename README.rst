@@ -2,31 +2,35 @@
 SpectrumAnalysis
 ================
 
-
-.. image:: https://img.shields.io/pypi/v/SpectrumAnalysis.svg
-        :target: https://pypi.python.org/pypi/SpectrumAnalysis
-
-.. image:: https://img.shields.io/travis/WenhuaWuRiceUniv/SpectrumAnalysis.svg
-        :target: https://travis-ci.com/WenhuaWuRiceUniv/SpectrumAnalysis
-
-.. image:: https://readthedocs.org/projects/SpectrumAnalysis/badge/?version=latest
-        :target: https://SpectrumAnalysis.readthedocs.io/en/latest/?version=latest
-        :alt: Documentation Status
-
-
-
-
-Spectrum Analysis for THz Time-domain data
-
+Spectrum Analysis tool for THz Time-domain data analysis 
 
 * Free software: GNU General Public License v3
-* Documentation: https://SpectrumAnalysis.readthedocs.io.
 
+Installation
+--------
+Use the following command to install this python package ：
+$ pip install －e .
+
+Usage
+--------
+1. Compress the folder containing all your txt file data into a zip file.
+
+2. Put the zip file into the same directory of your jupyter notebook
+
+3. In the notebook, simply import SpectrumAnalysis to analyze your data. You may refer to the notebooks in demo/ for examples.
 
 Features
 --------
 
-* TODO
+1. Easy to use by using jupyter notebook interface
+
+2. Require no data preprocessing before usage
+
+3. Can automatically identify data filenames , no need to hard code in the data filenames
+
+4. Generate plots with single line of command
+
+5. Store raw data and statistical analysis data automatically into fits files.
 
 Credits
 -------
