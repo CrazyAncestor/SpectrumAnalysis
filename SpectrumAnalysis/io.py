@@ -96,7 +96,9 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
 
         print("1. Author of this metadata: ", flush=True)
         primary_hdu.header['AUTHOR'] = input("Enter the author of this metadata: ")
-        print("2. Brief description of this project: ", flush=True)
+        print("2. Date of writing this data analysis: ", flush=True)
+        primary_hdu.header['DATE'] = input("Enter the date of this metadata: ")
+        print("3. Brief description of this project: ", flush=True)
         primary_hdu.header['PROJECT_GOAL'] = input("Enter the goal of this project: ")
         
         hdul = fits.HDUList([primary_hdu])
