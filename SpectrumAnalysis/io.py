@@ -476,6 +476,8 @@ def show_fits_info(fits_path):
     """
     with fits.open(fits_path) as hdul:
         hdul.info()
+        print('Primary HDU Info:')
+        print(hdul[0].header)
         for hdu in hdul[1:]:
             print("-" * 30)
             print(f"HDU id: {hdu.name}")
