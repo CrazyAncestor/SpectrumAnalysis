@@ -389,6 +389,40 @@ def load_data_from_fits(fits_path, print_summary=False):
 
     return data_dict
 
+def parse_header_line(header_line):
+    """
+    Parses a header line to extract step_fs, points, start_ps, and delay_ms.
+    
+    Args:
+        header_line (str): The header line to parse.
+    
+    Returns:
+        dict: A dictionary with extracted values if the pattern matches.
+        bool: False if the pattern does not match.
+    """
+    # Define the regex pattern
+    pattern = r'step(\d+)fs_(\d+)pnts_from([-+]?\d+)ps_delay(\d+)ms'
+    
+    # Match the pattern
+    match = re.search(pattern, header_line)
+    if match:
+        # Extract values
+        step_fs = int(match.group(1))
+        points = int(match.group(2))
+        start_ps = int(match.group(3))
+        delay_ms = int(match.group(4))
+        
+        # Return the extracted values as a dictionary
+        return {
+            "step_fs": step_fs,
+            "points": points,
+            "start_ps": start_ps,
+            "delay_ms": delay_ms
+        }
+    else:
+        # Return False if the pattern does not match
+        return False
+    
 def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
 
     grouped_data = defaultdict(dict)
@@ -411,8 +445,9 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
                 start_ps = int(header_match.group(2))
                 delay_ms = int(header_match.group(3))
             else:
-                print(f"Warning: couldn't parse header in {filename}")
+                print(f"Warning: couldn't parse header in {filename}. Skipping this file")
                 step_fs = start_ps = delay_ms = None
+                return
 
             # Determine if the file is saved for each scan or not
             if save_each_scan:
@@ -474,43 +509,47 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
         except Exception as e:
             print(f"Error loading T file {filename}: {e}")
     
-    # --- Process field-dependent but not saved each scan files ---
+    all_txt_files = glob.glob(os.path.join(raw_data_dir, '*.txt'))
+    all_scan_files = glob.glob(os.path.join(raw_data_dir, '*_scan*.txt'))
+    info_files = glob.glob(os.path.join(raw_data_dir, '*_info.txt'))
+    log_files = glob.glob(os.path.join(raw_data_dir, '*_log.txt'))
+
     B_field_dependent_not_saved_each_scan_files = [
         f for f in glob.glob(os.path.join(raw_data_dir, '*_*T.txt'))
         if re.search(r'_[-+]?\d*\.?\d+T\.txt$', os.path.basename(f))
     ]
-    
+    B_field_dependent_saved_each_scan_files = [
+        f for f in glob.glob(os.path.join(raw_data_dir, '*_scan*.txt'))
+        if re.search(r'_[-+]?\d*\.?\d+T_scan\d+', os.path.basename(f))
+    ]
+    all_scan__files_not_field_dependent = list(set(all_scan_files) - \
+                                            set(B_field_dependent_saved_each_scan_files))
+    other_files = list(set(all_txt_files) - \
+                       set(B_field_dependent_saved_each_scan_files) - \
+                       set(B_field_dependent_not_saved_each_scan_files) - \
+                       set(all_scan__files_not_field_dependent) - \
+                       set(log_files) - set(info_files))
+
+    print(B_field_dependent_not_saved_each_scan_files)
+    print(B_field_dependent_saved_each_scan_files)
+    print(all_scan__files_not_field_dependent)
+    print(other_files)
+
+    # --- Process field-dependent but not saved each scan files ---
     for file_path in B_field_dependent_not_saved_each_scan_files:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=True, save_each_scan=False)
 
-    # --- Process save-each-scan files ---
-    all_scan_files = glob.glob(os.path.join(raw_data_dir, '*_scan*.txt'))
-
-    save_each_scan_files = []
-    B_field_dependent_and_save_each_scan_files = []
-
-    for file_path in all_scan_files:
-        filename = os.path.basename(file_path)
-
-        if re.search(r'_[-+]?\d*\.?\d+T_scan\d+', filename):
-            B_field_dependent_and_save_each_scan_files.append(file_path)
-        else:
-            save_each_scan_files.append(file_path)
-
-
     # --- Process: non-field-dependent scan files ---
-    for file_path in save_each_scan_files:
+    for file_path in all_scan__files_not_field_dependent:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=False, save_each_scan=True)
 
     # --- Process: field-dependent scan files ---
-    for file_path in B_field_dependent_and_save_each_scan_files:
+    for file_path in B_field_dependent_saved_each_scan_files:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=True, save_each_scan=True)
 
-
-    # --- Process *_Aperture.txt files ---
-    aperture_files = glob.glob(os.path.join(raw_data_dir, '*_Aperture.txt'))
-    for file_path in aperture_files:
-        extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=False)
+    # --- Process other files ---
+    for file_path in other_files:
+        extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=False, save_each_scan=False)
 
     # --- Save grouped data ---
     preprocessed_filenames = []
