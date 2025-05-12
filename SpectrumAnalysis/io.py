@@ -530,11 +530,6 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
                        set(all_scan__files_not_field_dependent) - \
                        set(log_files) - set(info_files))
 
-    print(B_field_dependent_not_saved_each_scan_files)
-    print(B_field_dependent_saved_each_scan_files)
-    print(all_scan__files_not_field_dependent)
-    print(other_files)
-
     # --- Process field-dependent but not saved each scan files ---
     for file_path in B_field_dependent_not_saved_each_scan_files:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=True, save_each_scan=False)
@@ -630,7 +625,7 @@ def show_fits_info(fits_path):
         print(hdul[0].header)
         for hdu in hdul[1:]:
             print("-" * 30)
-            print(f"HDU id: {hdu.name}")
+            print(f"HDU name: {hdu.name}")
             print(hdu.header['FILENAME'])
             print(f"Data Date: {hdu.header['DATE']}")
             print(f"Data shape: {hdu.data.shape}")

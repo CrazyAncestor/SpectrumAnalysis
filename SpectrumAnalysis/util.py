@@ -13,45 +13,45 @@ def give_B_field_values(header):
     return [header[f'B{i}'] for i in range(0, header['N_BFIELD'])]
 
 
-def confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_id, allow_overwrite=False):
+def confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_name, allow_overwrite=False):
     with fits.open(fits_file) as hdul:
-        if hdu_id not in hdul:
-            print(f"HDU {hdu_id} not found in {fits_file}.", flush=True)
+        if hdu_name not in hdul:
+            print(f"HDU {hdu_name} not found in {fits_file}.", flush=True)
             hdu_exist = False
         else:
-            print(f"HDU {hdu_id} found in {fits_file}.", flush=True)
+            print(f"HDU {hdu_name} found in {fits_file}.", flush=True)
             hdu_exist = True
         
     overwrite_or_not = False
     if hdu_exist and allow_overwrite==True:
-        print(f"Do you want to overwrite current {hdu_id} from {fits_file}? (y/n): ", flush=True)
-        delete_hdu = input(f"Do you want to remove current {hdu_id} from {fits_file}? (y/n): ")
+        print(f"Do you want to overwrite current {hdu_name} from {fits_file}? (y/n): ", flush=True)
+        delete_hdu = input(f"Do you want to remove current {hdu_name} from {fits_file}? (y/n): ")
         if delete_hdu.lower() == 'y':
-            print(f"Removing {hdu_id} from {fits_file}.")
-            delete_hdu_from_fits(fits_file, hdu_id)
+            print(f"Removing {hdu_name} from {fits_file}.")
+            delete_hdu_from_fits(fits_file, hdu_name)
             overwrite_or_not = True
         else:
-            print(f"Keeping {hdu_id} in {fits_file}.")
+            print(f"Keeping {hdu_name} in {fits_file}.")
     
     return hdu_exist, overwrite_or_not
 
-def read_image_hdu(fits_file, hdu_id):
+def read_image_hdu(fits_file, hdu_name):
     with fits.open(fits_file) as hdul:
-        hdu = hdul[hdu_id]
+        hdu = hdul[hdu_name]
         header = hdu.header.copy()
         data = hdu.data.copy()
         return header, np.array(data)
 
-def raw_stat_hdu_name(hdu_id):
-    if hdu_id[:5] == 'STAT_':
-        hdu_stat_id = hdu_id
+def raw_stat_hdu_name(hdu_name):
+    if hdu_name[:5] == 'STAT_':
+        hdu_stat_id = hdu_name
     else:
-        hdu_stat_id = 'STAT_' + hdu_id
+        hdu_stat_id = 'STAT_' + hdu_name
     hdu_raw_data_id = hdu_stat_id[5:]
     return hdu_raw_data_id, hdu_stat_id
 
-def read_stat_hdu(fits_file, hdu_id, B_field):
-    hdu_raw_data_id, hdu_stat_id = raw_stat_hdu_name(hdu_id)
+def read_stat_hdu(fits_file, hdu_name, B_field):
+    hdu_raw_data_id, hdu_stat_id = raw_stat_hdu_name(hdu_name)
 
     with fits.open(fits_file) as hdul:
         data = hdul[hdu_stat_id].data

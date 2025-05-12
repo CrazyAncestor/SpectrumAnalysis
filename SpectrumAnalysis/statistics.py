@@ -26,10 +26,10 @@ def statistical_analysis(fits_file, hdu_raw_data_id, time_range=None, B_field=No
 
     stat_data = [times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds]
 
-    hdu_id_stat = f'STAT_{hdu_raw_data_id}'
-    hdu_exist, overwrite_or_not = confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_id_stat, allow_overwrite=True)
+    hdu_name_stat = f'STAT_{hdu_raw_data_id}'
+    hdu_exist, overwrite_or_not = confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_name_stat, allow_overwrite=True)
     if hdu_exist==False or overwrite_or_not==True:
-        write_data_to_bin_hdu(fits_file = fits_file, hdu_new_id = hdu_id_stat, hdu_new_type='STAT', hdu_new_header=raw_data_header, stat_data=stat_data)
+        write_data_to_bin_hdu(fits_file = fits_file, hdu_new_id = hdu_name_stat, hdu_new_type='STAT', hdu_new_header=raw_data_header, stat_data=stat_data)
 
 def avg_std_of_time_freq_data(raw_data, reference_time, time_range, zero_padding_ratio):
         time = reference_time # Ensure the time is homogeneous
