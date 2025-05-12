@@ -476,9 +476,10 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
     
     # --- Process field-dependent but not saved each scan files ---
     B_field_dependent_not_saved_each_scan_files = [
-        f for f in glob.glob(os.path.join(raw_data_dir, '_[0-9]*T.txt'))
-        if any(c.isdigit() for c in os.path.basename(f)) and 'T' in os.path.basename(f)
+        f for f in glob.glob(os.path.join(raw_data_dir, '*_*T.txt'))
+        if re.search(r'_[-+]?\d*\.?\d+T\.txt$', os.path.basename(f))
     ]
+    
     for file_path in B_field_dependent_not_saved_each_scan_files:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=True, save_each_scan=False)
 
@@ -491,7 +492,7 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
     for file_path in all_scan_files:
         filename = os.path.basename(file_path)
 
-        if re.search(r'_[\d.]+T_scan\d+', filename):
+        if re.search(r'_[-+]?\d*\.?\d+T_scan\d+', filename):
             B_field_dependent_and_save_each_scan_files.append(file_path)
         else:
             save_each_scan_files.append(file_path)
