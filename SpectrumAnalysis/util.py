@@ -44,18 +44,18 @@ def read_image_hdu(fits_file, hdu_name):
 
 def raw_stat_hdu_name(hdu_name):
     if hdu_name[:5] == 'STAT_':
-        hdu_stat_id = hdu_name
+        hdu_stat_name = hdu_name
     else:
-        hdu_stat_id = 'STAT_' + hdu_name
-    hdu_raw_data_id = hdu_stat_id[5:]
-    return hdu_raw_data_id, hdu_stat_id
+        hdu_stat_name = 'STAT_' + hdu_name
+    hdu_raw_data_name = hdu_stat_name[5:]
+    return hdu_raw_data_name, hdu_stat_name
 
 def read_stat_hdu(fits_file, hdu_name, B_field):
-    hdu_raw_data_id, hdu_stat_id = raw_stat_hdu_name(hdu_name)
+    hdu_raw_data_name, hdu_stat_name = raw_stat_hdu_name(hdu_name)
 
     with fits.open(fits_file) as hdul:
-        data = hdul[hdu_stat_id].data
-        header = hdul[hdu_stat_id].header
+        data = hdul[hdu_stat_name].data
+        header = hdul[hdu_stat_name].header
 
         time_N = len(data[0][0])/header['N_BFIELD']
         freq_N = len(data[3][0])/header['N_BFIELD']
@@ -89,18 +89,18 @@ def read_stat_hdu(fits_file, hdu_name, B_field):
 
         return times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, header.copy()
 
-def write_data_to_bin_hdu(fits_file, hdu_new_id, hdu_new_type, hdu_new_header, stat_data):
+def write_data_to_bin_hdu(fits_file, hdu_new_name, hdu_new_type, hdu_new_header, stat_data):
     with fits.open(fits_file, mode='update') as hdul:
 
         # Flatten the arrays
         stat_arrs = [arr.flatten().astype(np.float32) for arr in stat_data]
         # Convert to a format that fits understands: an object array
-        col = fits.Column(name=hdu_new_id, format='PE()', array=np.array(stat_arrs, dtype=object))
+        col = fits.Column(name=hdu_new_name, format='PE()', array=np.array(stat_arrs, dtype=object))
 
         # Make a binary table
         hdu_new = fits.BinTableHDU.from_columns([col])
         hdu_new.header = hdu_new_header.copy()
-        hdu_new.header['EXTNAME'] = hdu_new_id
+        hdu_new.header['EXTNAME'] = hdu_new_name
         hdu_new.header['HDU_TYPE'] = hdu_new_type
         print(f"Adding {hdu_new.name} to the FITS file.")
         print(hdu_new.header)

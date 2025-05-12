@@ -6,11 +6,11 @@ from .statistics import statistical_analysis
 def plot_statistics(fits_file, hdu_name, B_field=0., calculate_from_raw_data=True, time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
     
     # First do statistical analysis
-    hdu_raw_data_id, hdu_stat_id = raw_stat_hdu_name(hdu_name)
+    hdu_raw_data_name, hdu_stat_name = raw_stat_hdu_name(hdu_name)
     if calculate_from_raw_data:
-        statistical_analysis(fits_file, hdu_raw_data_id, time_range, B_field, zero_padding_ratio)
+        statistical_analysis(fits_file, hdu_raw_data_name, time_range, B_field, zero_padding_ratio)
     # Then read the hdu data
-    times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, _ = read_stat_hdu(fits_file, hdu_stat_id, B_field)
+    times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, _ = read_stat_hdu(fits_file, hdu_stat_name, B_field)
 
 
     # Plot time-domain data
@@ -87,8 +87,8 @@ def plot_statistics(fits_file, hdu_name, B_field=0., calculate_from_raw_data=Tru
 def plot_SN_ratio(fits_file, hdu_name, B_field=0., plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
     
     # Extract HDU data
-    hdu_raw_data_id, hdu_stat_id = raw_stat_hdu_name(hdu_name)
-    times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, _ = read_stat_hdu(fits_file, hdu_stat_id, B_field)
+    hdu_raw_data_name, hdu_stat_name = raw_stat_hdu_name(hdu_name)
+    times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, _ = read_stat_hdu(fits_file, hdu_stat_name, B_field)
 
 
     # Plot time-domain SN ratio
@@ -161,11 +161,11 @@ def plot_SN_ratio(fits_file, hdu_name, B_field=0., plot_only_positive_freq=True,
     print(f"Plots saved to {save_path}.")
 
 
-def plot_transmission_spec(fits_file, hdu_tr_id, hdu_ref_id, B_field=None, plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
+def plot_transmission_spec(fits_file, hdu_tr_name, hdu_ref_name, B_field=None, plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
     # Power Transmission
     # Extract time and frequency data
-    times, E_field_avg_refs, E_field_std_refs, freqs, fft_avg_real_refs, fft_avg_imag_refs, fft_std_refs, B_field_values, _ = read_stat_hdu(fits_file, hdu_ref_id, B_field= 0.0)
-    times, E_field_avg_trs, E_field_std_trs, freqs, fft_avg_real_trs, fft_avg_imag_trs, fft_std_trs, B_field_values, _ = read_stat_hdu(fits_file, hdu_tr_id, B_field=B_field)
+    times, E_field_avg_refs, E_field_std_refs, freqs, fft_avg_real_refs, fft_avg_imag_refs, fft_std_refs, B_field_values, _ = read_stat_hdu(fits_file, hdu_ref_name, B_field= 0.0)
+    times, E_field_avg_trs, E_field_std_trs, freqs, fft_avg_real_trs, fft_avg_imag_trs, fft_std_trs, B_field_values, _ = read_stat_hdu(fits_file, hdu_tr_name, B_field=B_field)
 
     x = []
     y_avg = []

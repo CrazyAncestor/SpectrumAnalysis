@@ -2,8 +2,8 @@ import numpy as np
 from astropy.io import fits
 from .util import read_image_hdu, write_data_to_bin_hdu, confirm_whether_hdu_exist_and_if_overwrite
 
-def statistical_analysis(fits_file, hdu_raw_data_id, time_range=None, B_field=None, zero_padding_ratio=None):
-    raw_data_header, raw_data = read_image_hdu(fits_file, hdu_raw_data_id)
+def statistical_analysis(fits_file, hdu_raw_data_name, time_range=None, B_field=None, zero_padding_ratio=None):
+    raw_data_header, raw_data = read_image_hdu(fits_file, hdu_raw_data_name)
 
     times = []
     E_field_avgs = []
@@ -13,8 +13,8 @@ def statistical_analysis(fits_file, hdu_raw_data_id, time_range=None, B_field=No
     fft_avg_imags = []
     fft_stds = []
 
-    for B_field_idx in range(raw_data.shape[0]):
-        time, E_field_avg, E_field_std, freq, fft_avg, fft_std = avg_std_of_time_freq_data(raw_data = raw_data[B_field_idx,:,:], reference_time=raw_data[0,:,0], time_range=time_range, zero_padding_ratio=zero_padding_ratio)
+    for B_field_namex in range(raw_data.shape[0]):
+        time, E_field_avg, E_field_std, freq, fft_avg, fft_std = avg_std_of_time_freq_data(raw_data = raw_data[B_field_namex,:,:], reference_time=raw_data[0,:,0], time_range=time_range, zero_padding_ratio=zero_padding_ratio)
         times = np.append(times, time)
         E_field_avgs = np.append(E_field_avgs, E_field_avg)
         E_field_stds = np.append(E_field_stds, E_field_std)
@@ -26,10 +26,10 @@ def statistical_analysis(fits_file, hdu_raw_data_id, time_range=None, B_field=No
 
     stat_data = [times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds]
 
-    hdu_name_stat = f'STAT_{hdu_raw_data_id}'
+    hdu_name_stat = f'STAT_{hdu_raw_data_name}'
     hdu_exist, overwrite_or_not = confirm_whether_hdu_exist_and_if_overwrite(fits_file, hdu_name_stat, allow_overwrite=True)
     if hdu_exist==False or overwrite_or_not==True:
-        write_data_to_bin_hdu(fits_file = fits_file, hdu_new_id = hdu_name_stat, hdu_new_type='STAT', hdu_new_header=raw_data_header, stat_data=stat_data)
+        write_data_to_bin_hdu(fits_file = fits_file, hdu_new_name = hdu_name_stat, hdu_new_type='STAT', hdu_new_header=raw_data_header, stat_data=stat_data)
 
 def avg_std_of_time_freq_data(raw_data, reference_time, time_range, zero_padding_ratio):
         time = reference_time # Ensure the time is homogeneous

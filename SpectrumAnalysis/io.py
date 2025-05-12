@@ -9,6 +9,7 @@ import os
 import shutil
 import time
 
+
 def unzip_file(zip_path, extract_to=None):
     """
     Extracts all files from a zip archive directly into the target folder,
@@ -219,10 +220,10 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
             return preprocessed_filenames
     
         # Step 8: Add HDU to the FITS file
-        hdu_index = 1
+        hdu_index = len(hdul)
         zip_index = 0
 
-        hdu_name_prefix = ["REF", "SAMPLE"]
+        hdu_name_prefix = "RAWDATA_"
         zip_paths = glob.glob('*.zip')
         if len(zip_paths)==0:
             raise ValueError("No zip file found in the current folder!")
@@ -232,53 +233,66 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
         print_help_message()
         while True:
             result = "null"
-            for i in range(2):
-                hdu_name = f"{hdu_name_prefix[i]}{hdu_index}"
-                
-                if hdu_name in [hdu.name for hdu in hdul]:
-                    print(f"HDU '{hdu_name}' already exists. Skipping...", flush=True)
+            
+            hdu_name_default = f"{hdu_name_prefix}{hdu_index}"
+            # Ask user if they want to create a new HDU
+            print(f"Do you want to create a new HDU? (y/n): ", flush=True)
+            create_new_hdu = input(f"Do you want to create a new HDU? (y/n): ").strip().lower()
+            if create_new_hdu != 'y':
+                print("Ending the addition of HDU.", flush=True)
+                break
+            print(f"Enter the name of the new HDU (default: {hdu_name_default}): ", flush=True)
+            hdu_name = input(f"Enter the name of the new HDU (default: {hdu_name_default}): ").strip() or hdu_name_default
+            if hdu_name in [hdu.name for hdu in hdul]:
+                print(f"HDU '{hdu_name}' already exists. Do you want to overwrite it? (y/n): ", flush=True)
+                overwrite_hdu = input(f"HDU '{hdu_name}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
+                if overwrite_hdu != 'y':
+                    print("Skipping HDU addition.", flush=True)
                     continue
+                else:
+                    print(f"Removing existing HDU '{hdu_name}' from the FITS file.", flush=True)
+                    hdu_index = None
+                    for i, hdu in enumerate(hdul):
+                        if hdu.name == hdu_name:
+                            hdu_index = i
+                            break
+                    del hdul[hdu_name]
     
-                while True:
-                    result = add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name)
+            while True:
+                result = add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name)
 
-                    if result == "end":
-                        # Clear the raw data directory files
-                        clear_directory_files(raw_data_dir)
-                        
-                        # Clear the preprocessed data directory files
-                        clear_directory_files(preprocessed_data_dir)
-                        break
-                    if result == "skip":
-                        break
-                    if result == "next_zip":
-                        # Clear the raw data directory files
-                        clear_directory_files(raw_data_dir)
-                        
-                        # Clear the preprocessed data directory files
-                        clear_directory_files(preprocessed_data_dir)
-                        zip_index += 1
-                        if zip_index>= len(zip_paths):
-                            zip_index = 0
-                        preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
-                    if result == "previous_zip":
-                        # Clear the raw data directory files
-                        clear_directory_files(raw_data_dir)
-                        
-                        # Clear the preprocessed data directory files
-                        clear_directory_files(preprocessed_data_dir)
-                        zip_index += -1
-                        if zip_index< 0 :
-                            zip_index = len(zip_paths)-1
-                        preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
-                    if result == "success":
-                        break
-                    if result == "help":
-                        print_help_message()
-                        continue
-                
                 if result == "end":
+                    # Clear the raw data directory files
+                    clear_directory_files(raw_data_dir)
+                        
+                    # Clear the preprocessed data directory files
+                    clear_directory_files(preprocessed_data_dir)
                     break
+                if result == "next_zip":
+                    # Clear the raw data directory files
+                    clear_directory_files(raw_data_dir)
+                        
+                    # Clear the preprocessed data directory files
+                    clear_directory_files(preprocessed_data_dir)
+                    zip_index += 1
+                    if zip_index>= len(zip_paths):
+                        zip_index = 0
+                    preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+                if result == "previous_zip":
+                    # Clear the raw data directory files
+                    clear_directory_files(raw_data_dir)
+                        
+                    # Clear the preprocessed data directory files
+                    clear_directory_files(preprocessed_data_dir)
+                    zip_index += -1
+                    if zip_index< 0 :
+                        zip_index = len(zip_paths)-1
+                    preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+                if result == "success":
+                    break
+                if result == "help":
+                    print_help_message()
+                    continue
 
             hdu_index += 1
             if result == "end":
@@ -290,7 +304,6 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
 
 def print_help_message():
     print_color_message(f"Press the index number to choose the file to read into the hdu", color_code=33)# yellow
-    print_color_message(f"Press 's' to skip the addition of HDU", color_code=33)
     print_color_message(f"Press 'e' to end the addition of HDU", color_code=33)
     print_color_message(f"Press 'n' to go to the next zip file", color_code=33)
     print_color_message(f"Press 'p' to go to the previous zip file", color_code=33)
@@ -298,7 +311,7 @@ def print_help_message():
 def print_color_message(text, color_code):
     print(f"\033[{color_code}m{text}\033[0m", flush=True)
 
-def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
+def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name):
     """
     Prompts the user to select a FITS file, stacks its 2D HDUs into a 3D array,
     and appends it to the specified FITS file as a new ImageHDU.
@@ -306,8 +319,9 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
     Parameters:
         hdul (HDUList): The FITS file to which the new HDU will be added.
         preprocessed_filenames (list of str): List of full paths to candidate FITS files.
-        hdu_name (str): Name to assign to the new HDU (e.g., 'REF1', 'SAMPLE1').
+        hdu_name (str): Name to assign to the new HDU (e.g., 'RAWDATA_1').
     """
+    
     # Print the list of available files
     print("-" * 30)
     print_color_message(f"Please select the FITS file to add as HDU '{hdu_name}' (press 'h' for help):", color_code=35) # magenta
@@ -322,9 +336,6 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
 
         input_message = input("Enter the index of the file: ")
 
-        if input_message.lower() == 's':
-            print("Skipping the addition of HDU.", flush=True)
-            return "skip"
         if input_message.lower() == 'e':
             print("Ending the addition of HDU.", flush=True)
             return "end"
@@ -352,14 +363,14 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
     # Open and process the selected FITS file
     with fits.open(selected_filename) as hdul_input:
         # Create and append the new ImageHDU
-        new_hdu = fits.ImageHDU(header=hdul_input[1].header ,data=hdul_input[1].data, name=hdu_name.upper())
+        new_hdu = fits.ImageHDU(header=hdul_input[1].header ,data=hdul_input[1].data, name=hdu_name)
         
         # Set the HDU_TYPE to be RAW_DATA
         new_hdu.header['HDU_TYPE'] = 'RAW_DATA'
 
     # Append the new HDU to the original FITS file
     hdul.append(new_hdu.copy())
-    print(f"HDU '{hdu_name.upper()}' added successfully.", flush=True)
+    print(f"HDU '{hdu_name}' added successfully.", flush=True)
     return "success"
     
 def load_data_from_fits(fits_path, print_summary=False):
