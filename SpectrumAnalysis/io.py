@@ -7,6 +7,8 @@ from collections import defaultdict
 import zipfile
 import os
 import shutil
+import time
+
 
 def unzip_file(zip_path, extract_to=None):
     """
@@ -82,6 +84,109 @@ def clear_directory_files(directory):
         except Exception as e:
             print(f'Failed to delete {file_path}. Reason: {e}')
 
+def combine_arrays_of_differnt_shape(arrays, filename):
+    """
+    Combines a list of NumPy arrays along axis 0.
+    If arrays differ in size along axis 2, asks the user whether to truncate.
+    
+    Parameters:
+        arrays (List[np.ndarray]): List of NumPy arrays to combine.
+    
+    Returns:
+        np.ndarray: Combined array along axis 0, or None if user declines truncation.
+    """
+    print(f"Processing file {filename}",flush=True)
+    # Get shapes along axis 2
+    axis2_lengths = [arr.shape[2] for arr in arrays if arr.ndim >= 3]
+
+    if len(set(axis2_lengths)) > 1:
+        print("Arrays differ in shape along axis 2:",flush=True)
+        for i, arr in enumerate(arrays):
+            print(f"  Array {i}: shape = {arr.shape}")
+        
+        print("The two data have different shapes. Do you want to truncate all arrays to the smallest length on axis 2? (y/n): ",flush=True)
+        answer = input("Do you want to truncate all arrays to the smallest length on axis 2? (y/n): ").strip().lower()
+        
+        if answer != 'y':
+            print("Aborting combination.")
+            return None
+        
+        min_len = min(axis2_lengths)
+        print(f"Truncating all arrays to axis 2 size: {min_len}",flush=True)
+        arrays = [arr[:, :, :min_len] if arr.shape[2] > min_len else arr for arr in arrays]
+
+    # Combine on axis 0
+    return np.concatenate(arrays, axis=0)
+
+def combine_preprocessed_fits(fits1, fits2):
+    B_fields_new = []
+    with fits.open(fits1, mode='readonly') as hdul:
+        hdu = hdul[1].copy()
+        header = hdu.header.copy()
+        data_to_be_combined = hdu.data.copy()
+        n_increase = header['N_BFIELD']
+        for i in range(n_increase):
+            B_fields_new.append(header[f'B{i}'])
+    time.sleep(0.1)
+    with fits.open(fits2, mode='update') as hdul:
+        hdu = hdul[1]
+
+        # update header
+        header = hdu.header
+        n_old = header['N_BFIELD']
+        for i in range(n_increase):
+            header[f'B{i + n_old}'] = B_fields_new[i]
+        header['N_BFIELD'] = n_old + n_increase
+
+        # update data
+        data_old = hdu.data.copy()
+        data_new = combine_arrays_of_differnt_shape(arrays=[data_old, data_to_be_combined], filename=fits2)
+        hdu.data = data_new
+    time.sleep(0.1)
+    os.remove(fits1)
+
+
+
+def prompt_and_combine_fits_with_similar_names(filenames):
+    """
+    Given a list of .fits filenames, find all related files (same base name),
+    and ask the user if they want to combine the data.
+
+    Parameters:
+        filenames (List[str]): A list of full .fits file paths.
+    """
+
+    # Extract unique base names (e.g., "abcd" from "abcd.fits" and "abcd_0T.fits")
+    base_names = set()
+    for fname in filenames:
+        if fname.endswith('.fits'):
+            just_name = os.path.basename(fname)
+            base = just_name.split('.')[0].split('_')[0]
+            base_names.add(base)
+
+    for base in base_names:
+        matching_files = [f for f in filenames if os.path.basename(f).startswith(base) and f.endswith('.fits')]
+        if not matching_files:
+            continue
+
+        shortest_file = min(matching_files, key=lambda f: len(os.path.basename(f)))
+        matching_files.remove(shortest_file)
+        matching_files.insert(0, shortest_file)
+
+        if len(matching_files) > 1:
+            print(f"\nFound related FITS files for base '{base}':", flush=True)
+            for f in matching_files:
+                print(f"  {os.path.basename(f)}")
+
+            answer = input("Do you want to combine data from these files? (y/n): ").strip().lower()
+            if answer == 'y':
+                print(f"Combining data for: {', '.join([os.path.basename(f) for f in matching_files])}",flush=True)
+                for f in matching_files[1:]:
+                    combine_preprocessed_fits(f, shortest_file)
+                    filenames.remove(f)
+            else:
+                print("Skipping.")
+
 def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',preprocessed_data_dir='preprocessed_data'):
 
     # Step 5: Save the FITS file
@@ -96,7 +201,9 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
 
         print("1. Author of this metadata: ", flush=True)
         primary_hdu.header['AUTHOR'] = input("Enter the author of this metadata: ")
-        print("2. Brief description of this project: ", flush=True)
+        print("2. Date of writing this data analysis: ", flush=True)
+        primary_hdu.header['DATE'] = input("Enter the date of this metadata: ")
+        print("3. Brief description of this project: ", flush=True)
         primary_hdu.header['PROJECT_GOAL'] = input("Enter the goal of this project: ")
         
         hdul = fits.HDUList([primary_hdu])
@@ -113,63 +220,79 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
             return preprocessed_filenames
     
         # Step 8: Add HDU to the FITS file
-        hdu_index = 1
+        hdu_index = len(hdul)
         zip_index = 0
 
-        hdu_name_prefix = ["REF", "SAMPLE"]
+        hdu_name_prefix = "RAWDATA_"
         zip_paths = glob.glob('*.zip')
+        if len(zip_paths)==0:
+            raise ValueError("No zip file found in the current folder!")
         preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+        prompt_and_combine_fits_with_similar_names(preprocessed_filenames)
 
         print_help_message()
         while True:
             result = "null"
-            for i in range(2):
-                hdu_name = f"{hdu_name_prefix[i]}{hdu_index}"
-                
-                if hdu_name in [hdu.name for hdu in hdul]:
-                    print(f"HDU '{hdu_name}' already exists. Skipping...", flush=True)
+            
+            hdu_name_default = f"{hdu_name_prefix}{hdu_index}"
+            # Ask user if they want to create a new HDU
+            print(f"Do you want to create a new HDU? (y/n): ", flush=True)
+            create_new_hdu = input(f"Do you want to create a new HDU? (y/n): ").strip().lower()
+            if create_new_hdu != 'y':
+                print("Ending the addition of HDU.", flush=True)
+                break
+            print(f"Enter the name of the new HDU (default: {hdu_name_default}): ", flush=True)
+            hdu_name = input(f"Enter the name of the new HDU (default: {hdu_name_default}): ").strip() or hdu_name_default
+            if hdu_name in [hdu.name for hdu in hdul]:
+                print(f"HDU '{hdu_name}' already exists. Do you want to overwrite it? (y/n): ", flush=True)
+                overwrite_hdu = input(f"HDU '{hdu_name}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
+                if overwrite_hdu != 'y':
+                    print("Skipping HDU addition.", flush=True)
                     continue
+                else:
+                    print(f"Removing existing HDU '{hdu_name}' from the FITS file.", flush=True)
+                    hdu_index = None
+                    for i, hdu in enumerate(hdul):
+                        if hdu.name == hdu_name:
+                            hdu_index = i
+                            break
+                    del hdul[hdu_name]
     
-                while True:
-                    result = add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name)
+            while True:
+                result = add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name)
 
-                    if result == "end":
-                        # Clear the raw data directory files
-                        clear_directory_files(raw_data_dir)
-                        
-                        # Clear the preprocessed data directory files
-                        clear_directory_files(preprocessed_data_dir)
-                        break
-                    if result == "skip":
-                        break
-                    if result == "next_zip":
-                        # Clear the raw data directory files
-                        clear_directory_files(raw_data_dir)
-                        
-                        # Clear the preprocessed data directory files
-                        clear_directory_files(preprocessed_data_dir)
-                        zip_index += 1
-                        if zip_index>= len(zip_paths):
-                            zip_index = 0
-                        preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
-                    if result == "previous_zip":
-                        # Clear the raw data directory files
-                        clear_directory_files(raw_data_dir)
-                        
-                        # Clear the preprocessed data directory files
-                        clear_directory_files(preprocessed_data_dir)
-                        zip_index += -1
-                        if zip_index< 0 :
-                            zip_index = len(zip_paths)-1
-                        preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
-                    if result == "success":
-                        break
-                    if result == "help":
-                        print_help_message()
-                        continue
-                
                 if result == "end":
+                    # Clear the raw data directory files
+                    clear_directory_files(raw_data_dir)
+                        
+                    # Clear the preprocessed data directory files
+                    clear_directory_files(preprocessed_data_dir)
                     break
+                if result == "next_zip":
+                    # Clear the raw data directory files
+                    clear_directory_files(raw_data_dir)
+                        
+                    # Clear the preprocessed data directory files
+                    clear_directory_files(preprocessed_data_dir)
+                    zip_index += 1
+                    if zip_index>= len(zip_paths):
+                        zip_index = 0
+                    preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+                if result == "previous_zip":
+                    # Clear the raw data directory files
+                    clear_directory_files(raw_data_dir)
+                        
+                    # Clear the preprocessed data directory files
+                    clear_directory_files(preprocessed_data_dir)
+                    zip_index += -1
+                    if zip_index< 0 :
+                        zip_index = len(zip_paths)-1
+                    preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
+                if result == "success":
+                    break
+                if result == "help":
+                    print_help_message()
+                    continue
 
             hdu_index += 1
             if result == "end":
@@ -181,7 +304,6 @@ def process_data_zip(metadata_filename ='metadata.fits',raw_data_dir='raw_data',
 
 def print_help_message():
     print_color_message(f"Press the index number to choose the file to read into the hdu", color_code=33)# yellow
-    print_color_message(f"Press 's' to skip the addition of HDU", color_code=33)
     print_color_message(f"Press 'e' to end the addition of HDU", color_code=33)
     print_color_message(f"Press 'n' to go to the next zip file", color_code=33)
     print_color_message(f"Press 'p' to go to the previous zip file", color_code=33)
@@ -189,7 +311,7 @@ def print_help_message():
 def print_color_message(text, color_code):
     print(f"\033[{color_code}m{text}\033[0m", flush=True)
 
-def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
+def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name):
     """
     Prompts the user to select a FITS file, stacks its 2D HDUs into a 3D array,
     and appends it to the specified FITS file as a new ImageHDU.
@@ -197,8 +319,9 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
     Parameters:
         hdul (HDUList): The FITS file to which the new HDU will be added.
         preprocessed_filenames (list of str): List of full paths to candidate FITS files.
-        hdu_name (str): Name to assign to the new HDU (e.g., 'REF1', 'SAMPLE1').
+        hdu_name (str): Name to assign to the new HDU (e.g., 'RAWDATA_1').
     """
+    
     # Print the list of available files
     print("-" * 30)
     print_color_message(f"Please select the FITS file to add as HDU '{hdu_name}' (press 'h' for help):", color_code=35) # magenta
@@ -213,9 +336,6 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
 
         input_message = input("Enter the index of the file: ")
 
-        if input_message.lower() == 's':
-            print("Skipping the addition of HDU.", flush=True)
-            return "skip"
         if input_message.lower() == 'e':
             print("Ending the addition of HDU.", flush=True)
             return "end"
@@ -243,14 +363,14 @@ def add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name="REF1"):
     # Open and process the selected FITS file
     with fits.open(selected_filename) as hdul_input:
         # Create and append the new ImageHDU
-        new_hdu = fits.ImageHDU(header=hdul_input[1].header ,data=hdul_input[1].data, name=hdu_name.upper())
+        new_hdu = fits.ImageHDU(header=hdul_input[1].header ,data=hdul_input[1].data, name=hdu_name)
         
         # Set the HDU_TYPE to be RAW_DATA
         new_hdu.header['HDU_TYPE'] = 'RAW_DATA'
 
     # Append the new HDU to the original FITS file
     hdul.append(new_hdu.copy())
-    print(f"HDU '{hdu_name.upper()}' added successfully.", flush=True)
+    print(f"HDU '{hdu_name}' added successfully.", flush=True)
     return "success"
     
 def load_data_from_fits(fits_path, print_summary=False):
@@ -280,6 +400,40 @@ def load_data_from_fits(fits_path, print_summary=False):
 
     return data_dict
 
+def parse_header_line(header_line):
+    """
+    Parses a header line to extract step_fs, points, start_ps, and delay_ms.
+    
+    Args:
+        header_line (str): The header line to parse.
+    
+    Returns:
+        dict: A dictionary with extracted values if the pattern matches.
+        bool: False if the pattern does not match.
+    """
+    # Define the regex pattern
+    pattern = r'step(\d+)fs_(\d+)pnts_from([-+]?\d+)ps_delay(\d+)ms'
+    
+    # Match the pattern
+    match = re.search(pattern, header_line)
+    if match:
+        # Extract values
+        step_fs = int(match.group(1))
+        points = int(match.group(2))
+        start_ps = int(match.group(3))
+        delay_ms = int(match.group(4))
+        
+        # Return the extracted values as a dictionary
+        return {
+            "step_fs": step_fs,
+            "points": points,
+            "start_ps": start_ps,
+            "delay_ms": delay_ms
+        }
+    else:
+        # Return False if the pattern does not match
+        return False
+    
 def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
 
     grouped_data = defaultdict(dict)
@@ -302,8 +456,9 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
                 start_ps = int(header_match.group(2))
                 delay_ms = int(header_match.group(3))
             else:
-                print(f"Warning: couldn't parse header in {filename}")
+                print(f"Warning: couldn't parse header in {filename}. Skipping this file")
                 step_fs = start_ps = delay_ms = None
+                return
 
             # Determine if the file is saved for each scan or not
             if save_each_scan:
@@ -365,42 +520,42 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
         except Exception as e:
             print(f"Error loading T file {filename}: {e}")
     
-    # --- Process field-dependent but not saved each scan files ---
+    all_txt_files = glob.glob(os.path.join(raw_data_dir, '*.txt'))
+    all_scan_files = glob.glob(os.path.join(raw_data_dir, '*_scan*.txt'))
+    info_files = glob.glob(os.path.join(raw_data_dir, '*_info.txt'))
+    log_files = glob.glob(os.path.join(raw_data_dir, '*_log.txt'))
+
     B_field_dependent_not_saved_each_scan_files = [
-        f for f in glob.glob(os.path.join(raw_data_dir, '_[0-9]*T.txt'))
-        if any(c.isdigit() for c in os.path.basename(f)) and 'T' in os.path.basename(f)
+        f for f in glob.glob(os.path.join(raw_data_dir, '*_*T.txt'))
+        if re.search(r'_[-+]?\d*\.?\d+T\.txt$', os.path.basename(f))
     ]
+    B_field_dependent_saved_each_scan_files = [
+        f for f in glob.glob(os.path.join(raw_data_dir, '*_scan*.txt'))
+        if re.search(r'_[-+]?\d*\.?\d+T_scan\d+', os.path.basename(f))
+    ]
+    all_scan__files_not_field_dependent = list(set(all_scan_files) - \
+                                            set(B_field_dependent_saved_each_scan_files))
+    other_files = list(set(all_txt_files) - \
+                       set(B_field_dependent_saved_each_scan_files) - \
+                       set(B_field_dependent_not_saved_each_scan_files) - \
+                       set(all_scan__files_not_field_dependent) - \
+                       set(log_files) - set(info_files))
+
+    # --- Process field-dependent but not saved each scan files ---
     for file_path in B_field_dependent_not_saved_each_scan_files:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=True, save_each_scan=False)
 
-    # --- Process save-each-scan files ---
-    all_scan_files = glob.glob(os.path.join(raw_data_dir, '*_scan*.txt'))
-
-    save_each_scan_files = []
-    B_field_dependent_and_save_each_scan_files = []
-
-    for file_path in all_scan_files:
-        filename = os.path.basename(file_path)
-
-        if re.search(r'_[\d.]+T_scan\d+', filename):
-            B_field_dependent_and_save_each_scan_files.append(file_path)
-        else:
-            save_each_scan_files.append(file_path)
-
-
     # --- Process: non-field-dependent scan files ---
-    for file_path in save_each_scan_files:
+    for file_path in all_scan__files_not_field_dependent:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=False, save_each_scan=True)
 
     # --- Process: field-dependent scan files ---
-    for file_path in B_field_dependent_and_save_each_scan_files:
+    for file_path in B_field_dependent_saved_each_scan_files:
         extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=True, save_each_scan=True)
 
-
-    # --- Process *_Aperture.txt files ---
-    aperture_files = glob.glob(os.path.join(raw_data_dir, '*_Aperture.txt'))
-    for file_path in aperture_files:
-        extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=False)
+    # --- Process other files ---
+    for file_path in other_files:
+        extract_data_from_file(file_path, grouped_data=grouped_data, B_field_dependent=False, save_each_scan=False)
 
     # --- Save grouped data ---
     preprocessed_filenames = []
@@ -424,15 +579,16 @@ def save_data_to_fits(data_dict, output_path, basic_info_and_power, identifier):
     hdus = [fits.PrimaryHDU()]  # Start with an empty primary HDU
     
     # Stack the data for each B-field value
-    data = []
+    arrs = []
     B_field_values = []
 
     for B_field_value, info in sorted(data_dict.items()):
         B_field_values.append(B_field_value)
-        data.append(info["data"])
+        arr = np.array(info["data"])
+        arr = arr[np.newaxis,:]
+        arrs.append(arr)
 
-    #stacked_data = np.stack(data, axis=0)
-
+    data = combine_arrays_of_differnt_shape(arrs, output_path)
 
     # Input header information
     hdr = fits.Header()
@@ -480,7 +636,7 @@ def show_fits_info(fits_path):
         print(hdul[0].header)
         for hdu in hdul[1:]:
             print("-" * 30)
-            print(f"HDU id: {hdu.name}")
+            print(f"HDU name: {hdu.name}")
             print(hdu.header['FILENAME'])
             print(f"Data Date: {hdu.header['DATE']}")
             print(f"Data shape: {hdu.data.shape}")
