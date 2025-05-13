@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "SpectrumAnalysis"
-version = "0.1.0"
+version = "0.1.1"
 description = "Spectrum Analysis for THz Time-domain data"
 readme = "README.rst"
 authors = [
