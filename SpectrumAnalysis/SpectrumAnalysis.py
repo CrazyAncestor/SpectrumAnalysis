@@ -1,4 +1,4 @@
-from .io import process_data_zip, show_fits_info
+from .ui import input_raw_data, show_fits_info
 from SpectrumAnalysis.util import delete_hdu_from_fits, rename_hdu_from_fits, read_stat_hdu, write_data_to_bin_hdu, raw_stat_hdu_name
 from SpectrumAnalysis.visualization import plot_statistics, plot_SN_ratio, plot_transmission_spec
 from .HDU_DATA import HDU_DATA
@@ -7,7 +7,7 @@ import numpy as np
 class SpectrumAnalysis:
     def __init__(self, metadata_filename):
         self.metadata_filename = metadata_filename
-        process_data_zip(metadata_filename=metadata_filename)
+        input_raw_data(metadata_filename=metadata_filename)
         print('done')
     
     #   Showing basic info
