@@ -177,10 +177,8 @@ def prompt_and_combine_fits_with_similar_names(filenames):
     base_names = set()
     for fname in filenames:
         if fname.endswith('.fits'):
-            just_name = os.path.basename(fname)
-            base = just_name.split('.')[0]
+            base = os.path.splitext(os.path.basename(fname))[0]
             base_names.add(base)
-
     for base in base_names:
         matching_files = [
             f for f in filenames
