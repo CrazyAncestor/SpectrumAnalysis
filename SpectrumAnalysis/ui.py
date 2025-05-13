@@ -2,87 +2,66 @@ import os
 import glob
 from astropy.io import fits
 import os
+import re
 from .io import unzip_and_extract_data, clear_directory_files, combine_preprocessed_fits
 from .printing import print_color_message, print_help_message
 
-def input_raw_data(metadata_filename ='metadata.fits',raw_data_dir='raw_data',preprocessed_data_dir='preprocessed_data'):
-
-    # Step 1: Create directories
+def input_raw_data(metadata_filename='metadata.fits', raw_data_dir='raw_data', preprocessed_data_dir='preprocessed_data'):
+    # --- Step 1: Setup ---
     os.makedirs(raw_data_dir, exist_ok=True)
     os.makedirs(preprocessed_data_dir, exist_ok=True)
     fits_path = os.path.join('./', metadata_filename)
-
-    # Step 2: Create a new FITS file for metadata
     create_new_metadata_file(fits_path, metadata_filename)
 
-    with fits.open(fits_path, mode='update') as hdul:  
-        # Warning for no zip files
+    # --- Step 2: Open metadata FITS file ---
+    with fits.open(fits_path, mode='update') as hdul:
         zip_paths = glob.glob('*.zip')
-        if len(zip_paths)==0:
+        if not zip_paths:
             raise ValueError("No zip file found in the current folder!")
-        
-        # Step 3: Unzip and extract data from the first zip file
-        hdu_index = len(hdul)
-        zip_index = 0
-        
-        preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
-        prompt_and_combine_fits_with_similar_names(preprocessed_filenames)
 
+        zip_index = 0
+        hdu_index = len(hdul)
+
+        def clear_and_reload(zip_idx):
+            clear_directory_files(raw_data_dir)
+            clear_directory_files(preprocessed_data_dir)
+            files = unzip_and_extract_data(zip_paths[zip_idx], raw_data_dir, preprocessed_data_dir)
+            prompt_and_combine_fits_with_similar_names(files)
+            return files
+
+        # --- Step 3: Initial data load ---
+        preprocessed_filenames = clear_and_reload(zip_index)
         print_help_message()
 
-        # Step 4: Loop to add HDUs
+        # --- Step 4: HDU loop ---
         while True:
-            result = "null"
-            hdu_name_default = f"{"RAWDATA_"}{hdu_index}"
-            hdu_name = ask_user_if_to_create_new_hdu(hdu_name_default, hdul)
+            hdu_name = ask_user_if_to_create_new_hdu(f"RAWDATA_{hdu_index}", hdul)
             if hdu_name == "null":
                 continue
             if hdu_name == "end":
                 break
-    
+
             while True:
                 result = add_hdu_with_prompt_message(hdul, preprocessed_filenames, hdu_name)
 
                 if result == "end":
-                    # Clear the raw data directory files
-                    clear_directory_files(raw_data_dir)
-                        
-                    # Clear the preprocessed data directory files
-                    clear_directory_files(preprocessed_data_dir)
                     break
-                if result == "next_zip":
-                    # Clear the raw data directory files
-                    clear_directory_files(raw_data_dir)
-                        
-                    # Clear the preprocessed data directory files
-                    clear_directory_files(preprocessed_data_dir)
-                    zip_index += 1
-                    if zip_index>= len(zip_paths):
-                        zip_index = 0
-                    preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
-                    prompt_and_combine_fits_with_similar_names(preprocessed_filenames)
-                if result == "previous_zip":
-                    # Clear the raw data directory files
-                    clear_directory_files(raw_data_dir)
-                        
-                    # Clear the preprocessed data directory files
-                    clear_directory_files(preprocessed_data_dir)
-                    zip_index += -1
-                    if zip_index< 0 :
-                        zip_index = len(zip_paths)-1
-                    preprocessed_filenames = unzip_and_extract_data(zip_paths[zip_index], raw_data_dir, preprocessed_data_dir)
-                    prompt_and_combine_fits_with_similar_names(preprocessed_filenames)
-                if result == "success":
+                elif result == "success":
                     break
-                if result == "help":
+                elif result == "next_zip":
+                    zip_index = (zip_index + 1) % len(zip_paths)
+                    preprocessed_filenames = clear_and_reload(zip_index)
+                elif result == "previous_zip":
+                    zip_index = (zip_index - 1) % len(zip_paths)
+                    preprocessed_filenames = clear_and_reload(zip_index)
+                elif result == "help":
                     print_help_message()
-                    continue
 
             hdu_index += 1
             if result == "end":
                 break
-    
-    # Show the FITS file information
+
+    # --- Step 5: Show final result ---
     print("-" * 30)
     show_fits_info(fits_path)
 
@@ -199,11 +178,19 @@ def prompt_and_combine_fits_with_similar_names(filenames):
     for fname in filenames:
         if fname.endswith('.fits'):
             just_name = os.path.basename(fname)
-            base = just_name.split('.')[0].split('_')[0]
+            base = just_name.split('.')[0]
             base_names.add(base)
 
     for base in base_names:
-        matching_files = [f for f in filenames if os.path.basename(f).startswith(base) and f.endswith('.fits')]
+        matching_files = [
+            f for f in filenames
+            if (
+                f.endswith('.fits') and (
+                    os.path.basename(f) == f"{base}.fits" or
+                    re.match(rf"^{re.escape(base)}_[-+]?\d*\.?\d+T\.fits$", os.path.basename(f))
+                )
+            )
+        ]
         if not matching_files:
             continue
 
