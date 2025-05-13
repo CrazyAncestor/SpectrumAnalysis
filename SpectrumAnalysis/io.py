@@ -152,9 +152,10 @@ def extract_data_from_file(file_path, grouped_data, B_field_dependent, save_each
         else:
             E_field = data
             if header_info['step_fs'] is not None:
-                time = header_info['step_fs'] + np.arange(len(E_field)) * header_info['step_fs'] * 1e-3
+                time = header_info['start_ps'] * np.ones(len(E_field)) + np.arange(len(E_field)) * header_info['step_fs'] * 1e-3
             else:
                 time = np.zeros_like(E_field)
+            
 
         combined = np.column_stack((time, E_field))
 
@@ -311,7 +312,7 @@ def save_data_to_fits(data_dict, output_path, basic_info_and_power, identifier):
             hdr[f'B{i}'] = b
 
     # Create ImageHDU to store the data
-    hdu = fits.ImageHDU(data=data, header=hdr, name=identifier.upper())
+    hdu = fits.ImageHDU(data=data, header=hdr, name=identifier)
     hdus.append(hdu)
     
     # Write to file
