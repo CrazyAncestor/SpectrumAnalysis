@@ -67,7 +67,23 @@ def extract_data_from_files(raw_data_dir, preprocessed_data_dir=None):
 
     def match_files(pattern, condition=None):
         files = glob.glob(os.path.join(raw_data_dir, pattern))
-        return [f for f in files if condition is None or condition(os.path.basename(f))]
+        def has_two_columns_after_header(f):
+            try:
+                with open(f, 'r') as file:
+                    file.readline()  # skip header 1
+                    file.readline()  # skip header 2
+                    data_line = file.readline()
+                    return len(data_line.strip().split()) == 2
+            except Exception:
+                return False
+
+        if pattern == '*_scan*.txt':
+            return [
+                f for f in files
+                if has_two_columns_after_header(f) and (condition is None or condition(os.path.basename(f)))
+            ]
+        else:
+            return [f for f in files if condition is None or condition(os.path.basename(f))]
 
     # --- Categorize files ---
     all_txt_files = match_files('*.txt')
