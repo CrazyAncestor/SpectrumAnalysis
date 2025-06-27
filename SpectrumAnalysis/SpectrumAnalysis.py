@@ -21,9 +21,9 @@ class SpectrumAnalysis:
         rename_hdu_from_fits(self.metadata_filename, hdu_old_name=hdu_old_name, hdu_new_name=hdu_new_name)
 
     #   Visualization
-    def plot_statistics(self, hdu_name, B_field=0., calculate_from_raw_data=True, time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
+    def plot_statistics(self, hdu_name, B_field=0., calculate_from_raw_data=True, plot_time_range=None, fft_time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
         plot_statistics(fits_file = self.metadata_filename, hdu_name=hdu_name, B_field=B_field, calculate_from_raw_data= calculate_from_raw_data,\
-                                time_range=time_range, plot_only_positive_freq=plot_only_positive_freq,\
+                                plot_time_range=plot_time_range, fft_time_range=fft_time_range, plot_only_positive_freq=plot_only_positive_freq,\
                                freq_range = freq_range, zero_padding_ratio=zero_padding_ratio, title=title, save_fig=save_fig, save_path=save_path)
     def plot_SN_ratio(self, hdu_name, B_field=0., plot_only_positive_freq=True, freq_range = None, title=None, save_fig=False, save_path=None):
         plot_SN_ratio(fits_file = self.metadata_filename, hdu_name=hdu_name, B_field=B_field, plot_only_positive_freq=plot_only_positive_freq,\

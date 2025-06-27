@@ -3,12 +3,12 @@ import numpy as np
 from .util import raw_stat_hdu_name, read_stat_hdu
 from .statistics import statistical_analysis
 
-def plot_statistics(fits_file, hdu_name, B_field=0., calculate_from_raw_data=True, time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
+def plot_statistics(fits_file, hdu_name, B_field=0., calculate_from_raw_data=True, plot_time_range=None, fft_time_range=None, plot_only_positive_freq=True, freq_range = None, zero_padding_ratio=None, title=None, save_fig=False, save_path=None):
     
     # First do statistical analysis
     hdu_raw_data_name, hdu_stat_name = raw_stat_hdu_name(hdu_name)
     if calculate_from_raw_data:
-        statistical_analysis(fits_file, hdu_raw_data_name, time_range, B_field, zero_padding_ratio)
+        statistical_analysis(fits_file, hdu_raw_data_name, plot_time_range, fft_time_range, B_field, zero_padding_ratio)
     # Then read the hdu data
     times, E_field_avgs, E_field_stds, freqs, fft_avg_reals, fft_avg_imags, fft_stds, B_field_values, _ = read_stat_hdu(fits_file, hdu_stat_name, B_field)
 
